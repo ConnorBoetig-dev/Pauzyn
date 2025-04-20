@@ -176,7 +176,13 @@ def signup():
         # Extract form data
         email = request.form['email']
         password = request.form['password']
+        confirm_password = request.form['confirmPassword']
         name = request.form['name']
+        
+        # Verify passwords match (additional server-side validation)
+        if password != confirm_password:
+            flash('Passwords do not match.', 'danger')
+            return redirect(url_for('auth.signup'))
         
         logger.info(f"Form data received - Email: {email}, Name: {name}")
         
