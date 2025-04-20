@@ -2,14 +2,180 @@
 
 {% block title %}Pauzyn - Home{% endblock %}
 
+{% block styles %}
+<style>
+    section {
+        min-height: auto; /* Remove fixed height */
+        padding: 40px 0; /* Reduce padding between sections */
+    }
+    .hero {
+        min-height: 70vh; /* Reduce hero height to show more content */
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        color: white;
+        padding: 60px 0; /* Adjust hero padding */
+        margin-bottom: 20px; /* Add some space after hero */
+    }
+    .features {
+        background-color: #f8fafc;
+        padding: 60px 0;
+    }
+    .how-it-works {
+        background-color: white;
+        padding: 60px 0;
+    }
+    .demo {
+        background-color: #f1f5f9;
+        padding: 60px 0;
+    }
+    .feature-card {
+        padding: 25px;
+        border-radius: 12px;
+        background: white;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        height: 100%;
+        transition: transform 0.2s, box-shadow 0.2s;
+        margin-bottom: 20px;
+    }
+    .feature-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 12px rgba(0, 0, 0, 0.1);
+    }
+    .section-title {
+        font-size: 2.2rem;
+        font-weight: 600;
+        margin-bottom: 40px;
+        text-align: center;
+    }
+    .hero h1 {
+        font-size: 3.5rem;
+        font-weight: 700;
+        margin-bottom: 20px;
+    }
+    .hero p.lead {
+        font-size: 1.5rem;
+        margin-bottom: 30px;
+        opacity: 0.9;
+    }
+    /* Adjust spacing for feature cards */
+    .features .row {
+        margin-top: -20px;
+    }
+    .features .col-md-4 {
+        margin-top: 20px;
+    }
+    /* Timeline styling */
+    .timeline {
+        max-width: 800px;
+        margin: 0 auto;
+    }
+    .timeline-item {
+        padding: 20px;
+        background: #f8fafc;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+    .timeline-item h4 {
+        color: #4f46e5;
+        margin-bottom: 10px;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-8 text-center">
-        <h1 class="display-4 mt-5">Pauzyn</h1>
-        <p class="lead">AI-Powered Meme Video Search</p>
-        <div class="mt-5">
-            <a href="#" class="btn btn-primary btn-lg">Get Started</a>
+<!-- Hero Section -->
+<section class="hero d-flex align-items-center">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-8 text-center">
+                <h1>Pauzyn</h1>
+                <p class="lead">AI-Powered Meme Video Search</p>
+                <div class="mt-4">
+                    <a href="#features" class="btn btn-light btn-lg me-3">Learn More</a>
+                    <a href="{{ url_for('auth.signup') }}" class="btn btn-outline-light btn-lg">Get Started</a>
+                </div>
+            </div>
         </div>
     </div>
-</div>
+</section>
+
+<!-- Features Section -->
+<section class="features" id="features">
+    <div class="container">
+        <h2 class="section-title">Why Choose Pauzyn?</h2>
+        <div class="row">
+            <div class="col-md-4">
+                <div class="feature-card">
+                    <h3>Smart Search</h3>
+                    <p>Find the perfect meme moment using our AI-powered search engine that understands context and humor.</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="feature-card">
+                    <h3>Vast Library</h3>
+                    <p>Access thousands of meme-worthy videos from popular shows, movies, and viral content.</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="feature-card">
+                    <h3>Quick Export</h3>
+                    <p>Download or share your favorite meme clips instantly in various formats.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- How It Works Section -->
+<section class="how-it-works" id="how-it-works">
+    <div class="container">
+        <h2 class="section-title">How It Works</h2>
+        <div class="timeline">
+            <div class="timeline-item">
+                <h4>1. Search</h4>
+                <p>Enter a description of the meme you're looking for using natural language.</p>
+            </div>
+            <div class="timeline-item">
+                <h4>2. Browse</h4>
+                <p>Browse through AI-curated results that match your description.</p>
+            </div>
+            <div class="timeline-item">
+                <h4>3. Export</h4>
+                <p>Download or share your selected clip in your preferred format.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Demo Section -->
+<section class="demo" id="demo">
+    <div class="container">
+        <h2 class="text-center mb-5">See It In Action</h2>
+        <div class="row justify-content-center">
+            <div class="col-md-8 text-center">
+                <div class="ratio ratio-16x9">
+                    <div class="bg-dark d-flex align-items-center justify-content-center">
+                        <p class="text-light">Demo Video Coming Soon</p>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <a href="{{ url_for('auth.signup') }}" class="btn btn-primary btn-lg">Try It Now</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Smooth scroll for anchor links
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener('click', function (e) {
+            e.preventDefault();
+            document.querySelector(this.getAttribute('href')).scrollIntoView({
+                behavior: 'smooth'
+            });
+        });
+    });
+</script>
 {% endblock %}
