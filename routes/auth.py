@@ -221,18 +221,7 @@ def signup():
 
 @auth_bp.route('/confirm', methods=['GET', 'POST'])
 def confirm():
-    """Handle email verification for new users
-    
-    Flow:
-    1. User receives verification code via email
-    2. User submits code through confirmation form
-    3. Verify code with Cognito
-    4. Redirect to login upon success
-    
-    Returns:
-        GET: Confirmation code form
-        POST: Redirect to login or back to form with errors
-    """
+    """Handle email verification for new users"""
     if 'temp_email' not in session:
         flash('Please sign up first.', 'warning')
         return redirect(url_for('auth.signup'))
@@ -242,11 +231,15 @@ def confirm():
         email = session['temp_email']
         
         try:
+            # Calculate secret hash for the confirmation
+            secret_hash = get_secret_hash(email)
+            
             # Verify the confirmation code with Cognito
             client.confirm_sign_up(
                 ClientId=CLIENT_ID,
                 Username=email,
-                ConfirmationCode=code
+                ConfirmationCode=code,
+                SecretHash=secret_hash  # Add this line
             )
             
             # Clear temporary email from session
@@ -260,8 +253,8 @@ def confirm():
         except client.exceptions.ExpiredCodeException:
             flash('Verification code has expired. Please request a new one.', 'danger')
         except Exception as e:
+            logger.error(f"Confirmation error: {str(e)}")  # Add logging
             flash('An error occurred during verification.', 'danger')
-            print(f"Confirmation error: {str(e)}")  # For debugging
             
     return render_template('auth/confirm.html')
 
