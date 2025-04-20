@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}Pauzyn - Confirm Email{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h4>Verify Your Email</h4>
+            </div>
+            <div class="card-body">
+                <p>Please enter the verification code sent to your email.</p>
+                <form method="POST">
+                    <div class="mb-3">
+                        <label for="code" class="form-label">Verification Code</label>
+                        <input type="text" class="form-control" id="code" name="code" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Verify Email</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

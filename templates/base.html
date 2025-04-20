@@ -22,7 +22,7 @@
                     </li>
                     {% if 'id_token' in session %}
                         <li class="nav-item">
-                            <a class="nav-link" href="#">Dashboard</a>
+                            <span class="nav-link">Welcome, {{ session['user_name'] }}</span>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="{{ url_for('auth.logout') }}">Logout</a>

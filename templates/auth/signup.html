@@ -10,7 +10,7 @@
                 <h4>Create an Account</h4>
             </div>
             <div class="card-body">
-                <form method="POST">
+                <form method="POST" action="{{ url_for('auth.signup') }}">
                     <div class="mb-3">
                         <label for="name" class="form-label">Full Name</label>
                         <input type="text" class="form-control" id="name" name="name" required>
@@ -21,18 +21,22 @@
                     </div>
                     <div class="mb-3">
                         <label for="password" class="form-label">Password</label>
-                        <input type="password" class="form-control" id="password" name="password" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="password-confirm" class="form-label">Confirm Password</label>
-                        <input type="password" class="form-control" id="password-confirm" name="password-confirm" required>
+                        <input type="password" class="form-control" id="password" name="password" required 
+                               pattern="(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*\W).{8,}" 
+                               title="Password must be at least 8 characters long and contain numbers, special characters, uppercase and lowercase letters">
                     </div>
                     <button type="submit" class="btn btn-primary">Sign Up</button>
                 </form>
-                <hr>
-                <p>Already have an account? <a href="{{ url_for('auth.login') }}">Login</a></p>
             </div>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelector('form').addEventListener('submit', function(e) {
+    console.log('Form submitted');  // Debug log
+});
+</script>
 {% endblock %}

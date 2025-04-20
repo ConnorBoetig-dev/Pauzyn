@@ -9,7 +9,8 @@
 #   - url_for: Function to build URLs for routes dynamically
 #   - session: Dictionary-like object to store data between requests
 #   - flash: Function to send temporary messages to the next request
-from flask import Flask, render_template, redirect, url_for, session, flash
+import logging
+from flask import Flask, render_template
 
 # os: Module for interacting with operating system
 #   - Used here primarily for accessing environment variables
@@ -23,6 +24,12 @@ from dotenv import load_dotenv
 #   - Blueprint: A way to organize related routes in a modular way
 #   - auth_bp: The blueprint instance containing all authentication routes
 from routes.auth import auth_bp
+
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 # ============================================================================
 # CONFIGURATION SECTION

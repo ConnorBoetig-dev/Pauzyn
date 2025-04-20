@@ -8,4 +8,13 @@ body {
     letter-spacing: 1px;
 }
 
-/* We'll add more styles as needed */
+/* Style for the user's name in navbar */
+.navbar-nav .nav-link span {
+    color: #fff;
+    font-weight: 500;
+}
+
+/* Add some spacing between navbar items */
+.navbar-nav .nav-item {
+    margin-left: 10px;
+}
