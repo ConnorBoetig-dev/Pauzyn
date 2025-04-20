@@ -10,7 +10,7 @@
                 <h4>Verify Your Email</h4>
             </div>
             <div class="card-body">
-                <p>Please enter the verification code sent to your email.</p>
+                <p>Please enter the verification code sent to your email (<em>{{ session['temp_email'] }}</em>).</p>
                 <form method="POST">
                     <div class="mb-3">
                         <label for="code" class="form-label">Verification Code</label>
@@ -18,8 +18,12 @@
                     </div>
                     <button type="submit" class="btn btn-primary">Verify Email</button>
                 </form>
+                <div class="mt-3 text-center">
+                    <small>Didn't receive an email? <a href="{{ url_for('auth.resend_code') }}">Resend</a></small>
+                </div>
             </div>
         </div>
     </div>
 </div>
 {% endblock %}
+

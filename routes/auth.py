@@ -287,6 +287,31 @@ def logout():
     
     return redirect(url_for('home'))
 
+@auth_bp.route('/resend-code')
+def resend_code():
+    """Resend verification code to user's email"""
+    if 'temp_email' not in session:
+        flash('Please sign up first.', 'warning')
+        return redirect(url_for('auth.signup'))
+        
+    try:
+        email = session['temp_email']
+        secret_hash = get_secret_hash(email)
+        
+        # Resend confirmation code
+        client.resend_confirmation_code(
+            ClientId=CLIENT_ID,
+            Username=email,
+            SecretHash=secret_hash
+        )
+        
+        flash('Verification code has been resent to your email.', 'success')
+    except Exception as e:
+        logger.error(f"Error resending code: {str(e)}")
+        flash('Error resending verification code. Please try again.', 'danger')
+        
+    return redirect(url_for('auth.confirm'))
+
 # ============================================================================
 # HELPER FUNCTIONS FOR TOKEN MANAGEMENT
 # ============================================================================
