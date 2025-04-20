@@ -1,25 +1,23 @@
+# Importing necessary modules
 import os
 from flask import Flask, render_template, redirect, url_for, session, flash
 from dotenv import load_dotenv
+from routes.auth import auth_bp
 
-# Load environment variables
+# Load environment variables from .env file
 load_dotenv()
 
-# Initialize Flask app
+# Initialize Flask application
 app = Flask(__name__)
 app.secret_key = os.getenv('APP_SECRET_KEY')
+
+# Register the auth blueprint
+app.register_blueprint(auth_bp, url_prefix='/auth')
 
 @app.route('/')
 def home():
     return render_template('home.html')
 
-@app.route('/dashboard')
-def dashboard():
-    # Check if user is logged in
-    if 'id_token' not in session:
-        flash('Please log in to access the dashboard', 'warning')
-        return redirect(url_for('auth.login'))
-    return render_template('dashboard.html')
-
 if __name__ == '__main__':
     app.run(debug=True)
+
