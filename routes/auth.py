@@ -70,6 +70,8 @@ client = boto3.client('cognito-idp', region_name=REGION)
 # AUTHENTICATION ROUTES
 # ============================================================================
 
+import jwt  # Add this import at the top of the file
+
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
     """Handle user authentication via custom login form with Cognito backend
@@ -116,8 +118,8 @@ def login():
             
             # Decode the ID token to get user information
             # The ID token is a JWT that contains user information
-            import jwt
             id_token = auth_result['IdToken']
+            # Note: we skip verification since we trust the token we just received
             decoded_token = jwt.decode(id_token, options={"verify_signature": False})
             
             # Store user's name in session
@@ -146,10 +148,11 @@ def login():
             flash('Invalid login parameters. Please check your input.', 'danger')
             
         except Exception as e:
-            # Catches any unexpected errors
-            # In production, you might want to log this error
-            flash(f'An unexpected error occurred. Please try again later.', 'danger')
-            print(f"Login error: {str(e)}")  # For debugging
+            # Detailed error logging
+            logger.error(f"Login error details: {str(e)}", exc_info=True)
+            logger.error(f"Error type: {type(e)}")
+            flash('An unexpected error occurred. Please try again later.', 'danger')
+            print(f"Login error: {str(e)}")  # For immediate console output
 
     # For GET requests or failed POST requests, show the login form
     return render_template('auth/login.html')
@@ -261,10 +264,21 @@ def confirm():
 @auth_bp.route('/logout')
 def logout():
     """Handle user logout functionality"""
-    # Clear all session data
-    session.clear()
+    try:
+        # Explicitly remove each session key we set during login
+        session.pop('access_token', None)
+        session.pop('id_token', None)
+        session.pop('refresh_token', None)
+        session.pop('user_name', None)
+        
+        # Clear entire session as backup
+        session.clear()
+        
+        flash('You have been logged out successfully', 'success')
+    except Exception as e:
+        logger.error(f"Logout error: {str(e)}")
+        flash('Error during logout', 'danger')
     
-    flash('You have been logged out successfully', 'success')
     return redirect(url_for('home'))
 
 # ============================================================================
