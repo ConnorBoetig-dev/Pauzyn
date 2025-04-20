@@ -44,7 +44,24 @@
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
-                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% if message == 'Login successful!' or message == 'You have been logged out successfully' %}
+                        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert" id="authAlert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                        <script>
+                            // Auto-dismiss login/logout success messages after 4 seconds
+                            setTimeout(function() {
+                                const authAlert = document.getElementById('authAlert');
+                                if (authAlert) {
+                                    const bsAlert = new bootstrap.Alert(authAlert);
+                                    bsAlert.close();
+                                }
+                            }, 4000);
+                        </script>
+                    {% else %}
+                        <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endif %}
                 {% endfor %}
             {% endif %}
         {% endwith %}
