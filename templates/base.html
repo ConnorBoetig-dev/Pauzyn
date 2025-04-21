@@ -61,24 +61,11 @@
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
-                    {% if message == 'Login successful!' or message == 'You have been logged out successfully' %}
-                        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert" id="authAlert">
-                            {{ message }}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                        </div>
-                        <script>
-                            // Auto-dismiss login/logout success messages after 4 seconds
-                            setTimeout(function() {
-                                const authAlert = document.getElementById('authAlert');
-                                if (authAlert) {
-                                    const bsAlert = new bootstrap.Alert(authAlert);
-                                    bsAlert.close();
-                                }
-                            }, 4000);
-                        </script>
-                    {% else %}
-                        <div class="alert alert-{{ category }}">{{ message }}</div>
-                    {% endif %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert" 
+                         style="margin: 20px auto; max-width: 800px; font-size: 1.2rem;">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
                 {% endfor %}
             {% endif %}
         {% endwith %}
@@ -88,5 +75,17 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
     {% block scripts %}{% endblock %}
+    <script>
+        // Auto-dismiss alerts after 4 seconds
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(function() {
+                var alerts = document.querySelectorAll('.alert');
+                alerts.forEach(function(alert) {
+                    var bsAlert = new bootstrap.Alert(alert);
+                    bsAlert.close();
+                });
+            }, 4000);
+        });
+    </script>
 </body>
 </html>
