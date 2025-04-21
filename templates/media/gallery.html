@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+
+{% block styles %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@8/swiper-bundle.min.css">
+<style>
+.gallery-container {
+    padding: 2rem;
+}
+
+.gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.gallery-item {
+    position: relative;
+    aspect-ratio: 1;
+    cursor: pointer;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #f8f9fa;
+}
+
+.gallery-item img, .gallery-item video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.gallery-controls {
+    margin-bottom: 2rem;
+}
+
+/* Modal styles */
+.media-modal .modal-dialog {
+    max-width: 90vw;
+    margin: 1.75rem auto;
+}
+
+.swiper {
+    width: 100%;
+    height: 80vh;
+}
+
+.swiper-slide {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.swiper-slide img, .swiper-slide video {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+.media-info {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(0,0,0,0.7);
+    color: white;
+    padding: 1rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="gallery-container">
+    <div class="gallery-controls">
+        <div class="row">
+            <div class="col-md-6">
+                <select class="form-select" id="filterType">
+                    <option value="all">All Files</option>
+                    <option value="image">Images</option>
+                    <option value="video">Videos</option>
+                </select>
+            </div>
+            <div class="col-md-6">
+                <select class="form-select" id="sortBy">
+                    <option value="date">Sort by Date</option>
+                    <option value="name">Sort by Name</option>
+                </select>
+            </div>
+        </div>
+    </div>
+    
+    <div class="gallery-grid" id="galleryGrid"></div>
+</div>
+
+<!-- Modal -->
+<div class="modal fade media-modal" id="mediaModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-body p-0">
+                <button type="button" class="btn-close position-absolute top-0 end-0 m-3" data-bs-dismiss="modal"></button>
+                <div class="swiper">
+                    <div class="swiper-wrapper"></div>
+                    <div class="swiper-pagination"></div>
+                    <div class="swiper-button-prev"></div>
+                    <div class="swiper-button-next"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/swiper@8/swiper-bundle.min.js"></script>
+<script>
+class GalleryManager {
+    constructor() {
+        this.mediaFiles = [];
+        this.swiper = null;
+        this.modal = new bootstrap.Modal(document.getElementById('mediaModal'));
+        this.setupEventListeners();
+        this.loadMedia();
+    }
+
+    setupEventListeners() {
+        document.getElementById('filterType').addEventListener('change', () => this.loadMedia());
+        document.getElementById('sortBy').addEventListener('change', () => this.loadMedia());
+    }
+
+    async loadMedia() {
+        const filterType = document.getElementById('filterType').value;
+        const sortBy = document.getElementById('sortBy').value;
+        
+        try {
+            const response = await fetch(`/api/media/list?type=${filterType}&sort=${sortBy}`);
+            this.mediaFiles = await response.json();
+            this.renderGallery();
+        } catch (error) {
+            console.error('Error loading media:', error);
+        }
+    }
+
+    renderGallery() {
+        const grid = document.getElementById('galleryGrid');
+        grid.innerHTML = '';
+        
+        this.mediaFiles.forEach((file, index) => {
+            const item = document.createElement('div');
+            item.className = 'gallery-item';
+            
+            if (file.type === 'image') {
+                item.innerHTML = `<img src="${file.url}" alt="${file.filename}">`;
+            } else if (file.type === 'video') {
+                item.innerHTML = `<video src="${file.url}"></video>`;
+            }
+            
+            item.addEventListener('click', () => this.openModal(index));
+            grid.appendChild(item);
+        });
+    }
+
+    openModal(index) {
+        const swiperWrapper = document.querySelector('.swiper-wrapper');
+        swiperWrapper.innerHTML = '';
+        
+        this.mediaFiles.forEach(file => {
+            const slide = document.createElement('div');
+            slide.className = 'swiper-slide';
+            
+            let mediaElement;
+            if (file.type === 'image') {
+                mediaElement = `<img src="${file.url}" alt="${file.filename}">`;
+            } else if (file.type === 'video') {
+                mediaElement = `<video src="${file.url}" controls></video>`;
+            }
+            
+            slide.innerHTML = `
+                ${mediaElement}
+                <div class="media-info">
+                    <h5>${file.filename}</h5>
+                    <p>Uploaded: ${new Date(file.lastModified).toLocaleDateString()}</p>
+                    <p>Size: ${(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                </div>
+            `;
+            swiperWrapper.appendChild(slide);
+        });
+        
+        if (!this.swiper) {
+            this.swiper = new Swiper('.swiper', {
+                navigation: {
+                    nextEl: '.swiper-button-next',
+                    prevEl: '.swiper-button-prev',
+                },
+                pagination: {
+                    el: '.swiper-pagination',
+                    type: 'fraction',
+                },
+            });
+        } else {
+            this.swiper.update();
+        }
+        
+        this.swiper.slideTo(index, 0);
+        this.modal.show();
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    new GalleryManager();
+});
+</script>
+{% endblock %}
