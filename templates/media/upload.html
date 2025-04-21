@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="upload-container">
+    <div id="drop-zone" class="drop-zone">
+        <div class="drop-zone-prompt">
+            <i class="fas fa-cloud-upload-alt"></i>
+            <p>Drag and drop files here or click to select</p>
+        </div>
+        <input type="file" id="file-input" multiple accept="image/*,video/*" class="hidden">
+    </div>
+    
+    <div id="upload-list" class="upload-list">
+        <!-- Upload items will be inserted here -->
+    </div>
+</div>
+{% endblock %}
+
+{% block styles %}
+<style>
+.upload-container {
+    max-width: 800px;
+    margin: 2rem auto;
+    padding: 1rem;
+}
+
+.drop-zone {
+    border: 2px dashed #ccc;
+    border-radius: 8px;
+    padding: 2rem;
+    text-align: center;
+    transition: border-color 0.3s ease;
+    cursor: pointer;
+}
+
+.drop-zone.drag-over {
+    border-color: #4CAF50;
+    background-color: rgba(76, 175, 80, 0.1);
+}
+
+.upload-list {
+    margin-top: 2rem;
+}
+
+.upload-item {
+    display: flex;
+    align-items: center;
+    padding: 1rem;
+    border: 1px solid #eee;
+    margin-bottom: 0.5rem;
+    border-radius: 4px;
+}
+
+.upload-progress {
+    flex-grow: 1;
+    margin: 0 1rem;
+}
+
+.hidden {
+    display: none;
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+class UploadManager {
+    constructor() {
+        this.dropZone = document.getElementById('drop-zone');
+        this.fileInput = document.getElementById('file-input');
+        this.uploadList = document.getElementById('upload-list');
+        this.setupEventListeners();
+    }
+
+    setupEventListeners() {
+        this.dropZone.addEventListener('click', () => this.fileInput.click());
+        this.fileInput.addEventListener('change', (e) => this.handleFiles(e.target.files));
+        
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            this.dropZone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+            });
+        });
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            this.dropZone.addEventListener(eventName, () => {
+                this.dropZone.classList.add('drag-over');
+            });
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            this.dropZone.addEventListener(eventName, () => {
+                this.dropZone.classList.remove('drag-over');
+            });
+        });
+
+        this.dropZone.addEventListener('drop', (e) => {
+            this.handleFiles(e.dataTransfer.files);
+        });
+    }
+
+    async handleFiles(files) {
+        for (const file of files) {
+            if (!file.type.match(/^(image|video)\//)) {
+                continue; // Skip non-image/video files
+            }
+            await this.uploadFile(file);
+        }
+    }
+
+    async uploadFile(file) {
+        // Create upload item UI
+        const uploadItem = document.createElement('div');
+        uploadItem.className = 'upload-item';
+        uploadItem.innerHTML = `
+            <div class="file-info">${file.name}</div>
+            <div class="upload-progress">
+                <progress value="0" max="100"></progress>
+            </div>
+            <div class="upload-status">Preparing...</div>
+        `;
+        this.uploadList.appendChild(uploadItem);
+
+        try {
+            // Get presigned URL
+            const response = await fetch('/api/media/presigned-url', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    fileName: file.name,
+                    fileType: file.type
+                })
+            });
+            
+            if (!response.ok) throw new Error('Failed to get upload URL');
+            
+            const { presignedUrl, fileKey } = await response.json();
+
+            // Upload to S3
+            const uploadResponse = await fetch(presignedUrl, {
+                method: 'PUT',
+                body: file,
+                headers: {
+                    'Content-Type': file.type
+                }
+            });
+
+            if (!uploadResponse.ok) throw new Error('Upload failed');
+
+            uploadItem.querySelector('.upload-status').textContent = 'Complete';
+            uploadItem.querySelector('progress').value = 100;
+
+        } catch (error) {
+            uploadItem.querySelector('.upload-status').textContent = 'Failed';
+            console.error('Upload error:', error);
+        }
+    }
+}
+
+// Initialize upload manager when page loads
+document.addEventListener('DOMContentLoaded', () => {
+    new UploadManager();
+});
+</script>
+{% endblock %}

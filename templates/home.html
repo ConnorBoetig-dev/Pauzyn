@@ -91,7 +91,11 @@
                 <p class="lead">AI-Powered Meme Video Search</p>
                 <div class="mt-4">
                     <a href="#features" class="btn btn-light btn-lg me-3">Learn More</a>
-                    <a href="{{ url_for('auth.signup') }}" class="btn btn-outline-light btn-lg">Get Started</a>
+                    {% if 'id_token' in session %}
+                        <a href="{{ url_for('media.upload_page') }}" class="btn btn-outline-light btn-lg">Upload Media</a>
+                    {% else %}
+                        <a href="{{ url_for('auth.signup') }}" class="btn btn-outline-light btn-lg">Get Started</a>
+                    {% endif %}
                 </div>
             </div>
         </div>

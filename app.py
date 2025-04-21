@@ -11,6 +11,7 @@
 #   - flash: Function to send temporary messages to the next request
 import logging
 from flask import Flask, render_template
+from flask_login import LoginManager
 
 # os: Module for interacting with operating system
 #   - Used here primarily for accessing environment variables
@@ -25,6 +26,7 @@ from dotenv import load_dotenv
 #   - auth_bp: The blueprint instance containing all authentication routes
 from routes.auth import auth_bp
 from routes.account import account_bp
+from routes.media import media_bp
 
 # Configure logging
 logging.basicConfig(
@@ -57,6 +59,18 @@ app = Flask(__name__)
 # IMPORTANT: Should be kept secret and not committed to version control
 app.secret_key = os.getenv('APP_SECRET_KEY')
 
+# Initialize Flask-Login
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'auth.login'  # Specify the login route
+
+# Add this user loader function
+@login_manager.user_loader
+def load_user(user_id):
+    # You'll need to implement this based on your user model
+    # For now, we'll return None
+    return None
+
 # ============================================================================
 # BLUEPRINT REGISTRATION
 # ============================================================================
@@ -66,6 +80,7 @@ app.secret_key = os.getenv('APP_SECRET_KEY')
 # - Example: @auth_bp.route('/login') becomes accessible at '/auth/login'
 app.register_blueprint(auth_bp, url_prefix='/auth')
 app.register_blueprint(account_bp, url_prefix='/account')
+app.register_blueprint(media_bp)
 
 # ============================================================================
 # ROUTE DEFINITIONS
