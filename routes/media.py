@@ -14,8 +14,15 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+# Configure S3 client with regional endpoint
+s3_config = Config(
+    region_name="us-east-2",
+    signature_version="s3v4",
+    s3={"addressing_style": "virtual"}  # Uses bucketname.s3.us-east-2.amazonaws.com
+)
+
 media_bp = Blueprint('media', __name__)
-s3_client = boto3.client('s3', region_name='us-east-2')
+s3_client = boto3.client('s3', config=s3_config)
 
 @media_bp.route('/upload')
 @login_required
@@ -32,10 +39,8 @@ def get_presigned_url():
     if not file_name or not file_type:
         return jsonify({'error': 'Missing fileName or fileType'}), 400
         
-    # Get user ID from the decoded token stored in session
-    # Note: You might need to adjust this based on how you store the user ID
     decoded_token = jwt.decode(session['id_token'], options={"verify_signature": False})
-    user_id = decoded_token.get('sub')  # 'sub' is the user ID in Cognito tokens
+    user_id = decoded_token.get('sub')
     
     timestamp = datetime.utcnow().strftime('%Y%m%d-%H%M%S')
     unique_id = str(uuid4())[:8]
@@ -47,9 +52,10 @@ def get_presigned_url():
             Params={
                 'Bucket': 'pauzynbucket',
                 'Key': file_key,
-                'ContentType': file_type
+                'ContentType': file_type  # Removed ACL parameter
             },
-            ExpiresIn=300  # URL expires in 5 minutes
+            ExpiresIn=300,
+            HttpMethod='PUT'
         )
         
         return jsonify({
@@ -57,5 +63,9 @@ def get_presigned_url():
             'fileKey': file_key
         })
     except Exception as e:
+        print(f"Error generating presigned URL: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+
+
 

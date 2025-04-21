@@ -148,7 +148,10 @@ class UploadManager {
                 }
             });
 
-            if (!uploadResponse.ok) throw new Error('Upload failed');
+            if (!uploadResponse.ok) {
+                console.error('Upload failed:', await uploadResponse.text());
+                throw new Error('Upload failed');
+            }
 
             uploadItem.querySelector('.upload-status').textContent = 'Complete';
             uploadItem.querySelector('progress').value = 100;
@@ -166,3 +169,4 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 {% endblock %}
+
