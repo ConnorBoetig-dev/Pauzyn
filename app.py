@@ -24,6 +24,7 @@ from dotenv import load_dotenv
 #   - Blueprint: A way to organize related routes in a modular way
 #   - auth_bp: The blueprint instance containing all authentication routes
 from routes.auth import auth_bp
+from routes.account import account_bp
 
 # Configure logging
 logging.basicConfig(
@@ -64,6 +65,7 @@ app.secret_key = os.getenv('APP_SECRET_KEY')
 # - All routes defined in auth_bp will be prefixed with '/auth'
 # - Example: @auth_bp.route('/login') becomes accessible at '/auth/login'
 app.register_blueprint(auth_bp, url_prefix='/auth')
+app.register_blueprint(account_bp, url_prefix='/account')
 
 # ============================================================================
 # ROUTE DEFINITIONS
