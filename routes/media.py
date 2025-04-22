@@ -124,17 +124,35 @@ def list_media():
     decoded_token = jwt.decode(session['id_token'], options={"verify_signature": False})
     user_id = decoded_token.get('sub')
     
-    print(f"Fetching media for user: {user_id}")  # Debug log
+    # Get query parameters
+    media_type = request.args.get('type', 'all')
+    sort_by = request.args.get('sort', 'date')
+    last_key_str = request.args.get('lastKey')
+    
+    # Parse the last evaluated key if provided
+    last_evaluated_key = None
+    if last_key_str:
+        try:
+            last_evaluated_key = json.loads(last_key_str)
+        except json.JSONDecodeError:
+            return jsonify({'error': 'Invalid lastKey format'}), 400
+    
+    print(f"Fetching media for user: {user_id}, type: {media_type}, sort: {sort_by}")
     
     result = current_app.db_manager.get_user_media(
         user_id=user_id,
-        limit=50
+        limit=50,
+        last_evaluated_key=last_evaluated_key
     )
     
-    print(f"DB result: {result}")  # Debug log
-
     transformed_items = []
     for item in result.get('items', []):
+        # Skip items that don't match the filter
+        if media_type != 'all':
+            item_type = 'image' if item.get('file_type', '').startswith('image') else 'video'
+            if item_type != media_type:
+                continue
+                
         # Generate a presigned URL for viewing the media
         presigned_url = s3_client.generate_presigned_url(
             'get_object',
@@ -146,9 +164,6 @@ def list_media():
             },
             ExpiresIn=3600  # 1 hour
         )
-        
-        print(f"Generated presigned URL: {presigned_url}")  # Debug log
-        print(f"For file: {item.get('file_name')} of type: {item.get('file_type')}")  # Debug log
 
         transformed_item = {
             'id': item.get('mediaID'),

@@ -18,3 +18,25 @@ body {
 .navbar-nav .nav-item {
     margin-left: 10px;
 }
+
+.modal-counter, 
+.modal-navigation {
+    display: none; /* Hidden by default */
+}
+
+#mediaModal {
+    display: none; /* Hidden by default */
+}
+
+.modal-navigation {
+    display: none; /* Hidden by default */
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+}
+
+/* Show navigation as flex when visible */
+.modal-navigation.visible {
+    display: flex;
+}
+
