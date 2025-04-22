@@ -171,12 +171,13 @@ def list_media():
             'get_object',
             Params={
                 'Bucket': 'pauzynbucket',
-                'Key': item.get('s3_location')
+                'Key': item.get('s3_location'),
+                'ResponseContentDisposition': 'inline',
+                'ResponseContentType': item.get('file_type')
             },
             ExpiresIn=3600  # 1 hour
         )
 
-        # Transform the item to include URL and format for the UI
         transformed_item = {
             'id': item.get('mediaID'),
             'filename': item.get('file_name'),
@@ -207,7 +208,6 @@ def list_media():
 @login_required
 def gallery_page():
     """Render the media gallery interface."""
-    # Add initial data load
     decoded_token = jwt.decode(session['id_token'], options={"verify_signature": False})
     user_id = decoded_token.get('sub')
     
@@ -224,7 +224,9 @@ def gallery_page():
             'get_object',
             Params={
                 'Bucket': 'pauzynbucket',
-                'Key': item.get('s3_location')
+                'Key': item.get('s3_location'),
+                'ResponseContentDisposition': 'inline',
+                'ResponseContentType': item.get('file_type')
             },
             ExpiresIn=3600  # 1 hour
         )
@@ -251,7 +253,13 @@ def refresh_media_url(media_id):
     user_id = decoded_token.get('sub')
     
     # Get the media item from DynamoDB
-    media_item = current_app.db_manager.get_media_item(user_id, media_id)
+    result = current_app.db_manager.get_user_media(
+        user_id=user_id,
+        limit=50
+    )
+    
+    # Find the media item with the matching ID
+    media_item = next((item for item in result.get('items', []) if item.get('mediaID') == media_id), None)
     
     if not media_item:
         return jsonify({'error': 'Media not found'}), 404
@@ -262,7 +270,8 @@ def refresh_media_url(media_id):
         Params={
             'Bucket': 'pauzynbucket',
             'Key': media_item.get('s3_location'),
-            'ResponseContentDisposition': 'inline'
+            'ResponseContentDisposition': 'inline',
+            'ResponseContentType': media_item.get('file_type')
         },
         ExpiresIn=3600  # 1 hour
     )
