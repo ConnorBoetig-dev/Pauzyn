@@ -1,364 +1,214 @@
-# ============================================================================
-# IMPORTS SECTION
-# ============================================================================
+import logging                                      # std‑lib logging for debug/info
+from flask import Blueprint, render_template, redirect, url_for, request, flash, session  # Flask helpers
+import os                                           # env‑var access
+import hmac, hashlib, base64                        # build Cognito SECRET_HASH
+import json, uuid                                   # misc utilities (uuid unused here)
+from datetime import datetime                       # timestamps (currently unused)
 
-# Flask imports for web functionality:
-#   - Blueprint: Class for modular route organization
-#   - render_template: Function to render HTML templates
-#   - redirect: Function for URL redirections
-#   - url_for: Function to build URLs dynamically
-#   - request: Object to handle HTTP requests
-#   - flash: Function for temporary user messages
-#   - session: Dictionary-like object for user session management
-from flask import Blueprint, render_template, redirect, url_for, request, flash, session
+import boto3                                        # AWS SDK
+from botocore.exceptions import ClientError         # typed AWS errors
+import requests                                     # generic HTTP client (unused here)
+import jwt                                          # decode JWTs (Cognito id_token)
 
-# Core Python imports:
-#   - os: For environment variable access
-#   - hmac, hashlib, base64: For cryptographic operations
-#   - json: For JSON data handling
-#   - uuid: For generating unique identifiers
-#   - datetime: For timestamp handling
-import os
-import hmac
-import hashlib
-import base64
-import json
-import uuid
-from datetime import datetime
+# ------------------- INITIAL SETUP ---------------------------
+# Sets up logging, blueprint, and AWS Cognito client configuration
 
-# AWS related imports:
-#   - boto3: AWS SDK for Python
-#   - botocore.exceptions: For handling AWS-specific errors
-import boto3
-import botocore.exceptions
-
-# Third-party imports:
-#   - requests: HTTP library for making API calls
-import requests
-
-# Configure logging
-import logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-# ============================================================================
-# BLUEPRINT CONFIGURATION
-# ============================================================================
+auth_bp = Blueprint('auth', __name__)               # /auth blueprint definition
 
-# Create a Blueprint instance named 'auth'
-# - 'auth' is the Blueprint name
-# - __name__ is the Blueprint's import name
-# This Blueprint will handle all authentication-related routes
-auth_bp = Blueprint('auth', __name__)
+# ----- Cognito configuration pulled from .env -----
+USER_POOL_ID  = os.getenv('COGNITO_USER_POOL_ID')   # pool id
+CLIENT_ID     = os.getenv('COGNITO_CLIENT_ID')      # app client id
+CLIENT_SECRET = os.getenv('COGNITO_CLIENT_SECRET')  # app client secret
+REGION        = os.getenv('AWS_REGION')             # AWS region
 
-# ============================================================================
-# AWS COGNITO CONFIGURATION
-# ============================================================================
+client = boto3.client('cognito-idp', region_name=REGION)  # AWS Cognito API client
 
-# Load AWS Cognito configuration from environment variables
-# These variables should be set in your .env file
-USER_POOL_ID = os.getenv('COGNITO_USER_POOL_ID')      # Cognito User Pool identifier
-CLIENT_ID = os.getenv('COGNITO_CLIENT_ID')            # Application's client ID
-CLIENT_SECRET = os.getenv('COGNITO_CLIENT_SECRET')    # Application's client secret
-REGION = os.getenv('AWS_REGION')                      # AWS region (e.g., us-east-1)
+# ------------------- AUTHENTICATION ROUTES ---------------------------
+# Core authentication endpoints for user login. Handles username/password verification
+# and manages session tokens received from Cognito.
 
-# Initialize the Cognito Identity Provider client
-# This client will be used to interact with Cognito services
-client = boto3.client('cognito-idp', region_name=REGION)
-
-# ============================================================================
-# AUTHENTICATION ROUTES
-# ============================================================================
-
-import jwt  # Add this import at the top of the file
-
-@auth_bp.route('/login', methods=['GET', 'POST'])
+@auth_bp.route('/login', methods=['GET', 'POST'])    # /auth/login endpoint definition
 def login():
-    """Handle user authentication via custom login form with Cognito backend
-    
-    Flow:
-    1. User submits email/password through custom form
-    2. Backend validates with Cognito using USER_PASSWORD_AUTH flow
-    3. On success: Store tokens and redirect to home
-    4. On failure: Show appropriate error message
-    
-    Returns:
-        GET: Login form template
-        POST: Redirect to home (success) or back to login (failure)
-    """
-    if request.method == 'POST':
-        # Extract credentials from form submission
-        # These field names must match your HTML form's "name" attributes
-        email = request.form['email']
-        password = request.form['password']
-
+    """Custom login -> Cognito USER_PASSWORD_AUTH flow."""
+    if request.method == 'POST':                     # handle form submission
+        email    = request.form['email']             # extract email from form data
+        password = request.form['password']          # extract password from form data
         try:
-            secret_hash = get_secret_hash(email)
-            
-            response = client.initiate_auth(
-                ClientId=CLIENT_ID,
-                AuthFlow='USER_PASSWORD_AUTH',
-                AuthParameters={
-                    'USERNAME': email,
-                    'PASSWORD': password,
-                    'SECRET_HASH': secret_hash
+            secret_hash = get_secret_hash(email)     # generate hash required by Cognito for app client
+            resp = client.initiate_auth(             # start Cognito authentication flow
+                ClientId=CLIENT_ID,                  # app client identifier
+                AuthFlow='USER_PASSWORD_AUTH',       # use username/password auth flow
+                AuthParameters={                     # required auth parameters
+                    'USERNAME': email,               # user's email as username
+                    'PASSWORD': password,            # user's password
+                    'SECRET_HASH': secret_hash       # computed hash for security
                 }
             )
-
-            # Extract authentication tokens from successful response
-            auth_result = response['AuthenticationResult']
-            
-            # Store tokens in Flask session for subsequent requests
-            # - access_token: Short-lived token for API access
-            # - id_token: Contains user information (JWT)
-            # - refresh_token: Long-lived token to get new access tokens
-            session['access_token'] = auth_result['AccessToken']
-            session['id_token'] = auth_result['IdToken']
-            session['refresh_token'] = auth_result['RefreshToken']
-            
-            # Decode the ID token to get user information
-            # The ID token is a JWT that contains user information
-            id_token = auth_result['IdToken']
-            # Note: we skip verification since we trust the token we just received
-            decoded_token = jwt.decode(id_token, options={"verify_signature": False})
-            
-            # Store user's name in session
-            session['user_name'] = decoded_token.get('name', 'User')
-            
-            flash('Login successful!', 'success')
-            return redirect(url_for('home'))
-
-        except client.exceptions.NotAuthorizedException:
-            # Handles invalid credentials
-            # This exception occurs when username exists but password is wrong
+            auth = resp['AuthenticationResult']      # extract auth data from response
+            session['access_token']  = auth['AccessToken']   # store token for API calls
+            session['id_token']      = auth['IdToken']       # store JWT for user info
+            session['refresh_token'] = auth['RefreshToken']  # store token for renewal
+            decoded = jwt.decode(auth['IdToken'], options={"verify_signature": False})  # parse JWT payload
+            session['user_name'] = decoded.get('name', 'User')  # extract user name from token
+            flash('Login successful!', 'success')    # show success message
+            return redirect(url_for('home'))         # redirect to home page
+        except client.exceptions.NotAuthorizedException:     # wrong credentials
             flash('Incorrect username or password', 'danger')
-            
-        except client.exceptions.UserNotConfirmedException:
-            # Handles unconfirmed user accounts
-            # This occurs when user hasn't verified their email address
-            flash('Please confirm your account via email before logging in.', 'warning')
-            
-        except client.exceptions.UserNotFoundException:
-            # Handles non-existent username
-            # For security, we use the same message as wrong password
+        except client.exceptions.UserNotConfirmedException:  # email not verified
+            flash('Please confirm your account via email.', 'warning')
+        except client.exceptions.UserNotFoundException:      # user doesn't exist
             flash('Incorrect username or password', 'danger')
-            
-        except client.exceptions.InvalidParameterException:
-            # Handles malformed input
-            flash('Invalid login parameters. Please check your input.', 'danger')
-            
-        except Exception as e:
-            # Detailed error logging
-            logger.error(f"Login error details: {str(e)}", exc_info=True)
-            logger.error(f"Error type: {type(e)}")
-            flash('An unexpected error occurred. Please try again later.', 'danger')
-            print(f"Login error: {str(e)}")  # For immediate console output
+        except client.exceptions.InvalidParameterException:  # malformed request
+            flash('Invalid login parameters.', 'danger')
+        except Exception as e:                       # catch-all for other errors
+            logger.error(f"Login error: {e}", exc_info=True)  # log unexpected errors
+            flash('Unexpected error. Try again.', 'danger')
+    return render_template('auth/login.html')        # show login form for GET/failed POST
 
-    # For GET requests or failed POST requests, show the login form
-    return render_template('auth/login.html')
+# ------------------- COGNITO HASH UTILITY ---------------------------
+# Generates the secret hash required by Cognito for app client authentication.
+# This is required for all Cognito API calls when using an app client with a secret.
 
-def get_secret_hash(username):
-    """Calculate the secret hash for Cognito authentication"""
-    msg = username + CLIENT_ID
-    dig = hmac.new(
-        str(CLIENT_SECRET).encode('utf-8'), 
-        msg=msg.encode('utf-8'),
-        digestmod=hashlib.sha256
-    ).digest()
-    return base64.b64encode(dig).decode()
+def get_secret_hash(username: str) -> str:           # helper function to generate Cognito hash
+    msg = username + CLIENT_ID                       # combine username and client ID as required by Cognito
+    dig = hmac.new(CLIENT_SECRET.encode(),          # create new HMAC using client secret as key
+                   msg.encode(),                     # encode message to bytes
+                   hashlib.sha256).digest()          # use SHA256 algorithm and get raw bytes
+    return base64.b64encode(dig).decode()           # convert bytes to base64 then to string for Cognito
 
-@auth_bp.route('/signup', methods=['GET', 'POST'])
+# ------------------- REGISTRATION ROUTES ---------------------------
+# Handles new user registration flow, including initial signup, email verification,
+# and code confirmation. Works with Cognito's built-in verification system.
+
+@auth_bp.route('/signup', methods=['GET', 'POST'])   # /auth/signup endpoint definition
 def signup():
-    """Handle new user registration with Cognito"""
-    logger.info("Signup route accessed")
-    
-    if request.method == 'POST':
-        # Extract form data
-        email = request.form['email']
-        password = request.form['password']
-        confirm_password = request.form['confirmPassword']
-        name = request.form['name']
-        
-        # Verify passwords match (additional server-side validation)
-        if password != confirm_password:
-            flash('Passwords do not match.', 'danger')
-            return redirect(url_for('auth.signup'))
-        
-        logger.info(f"Form data received - Email: {email}, Name: {name}")
-        
+    """Register new user via Cognito sign_up."""
+    if request.method == 'POST':                     # handle form submission
+        email    = request.form['email']             # get email from signup form
+        password = request.form['password']          # get password from signup form
+        confirm  = request.form['confirmPassword']   # get password confirmation from form
+        name     = request.form['name']              # get user's display name from form
+        if password != confirm:                      # quick server-side password match check
+            flash('Passwords do not match.', 'danger')    # show error message
+            return redirect(url_for('auth.signup'))  # return to signup page
         try:
-            # Calculate secret hash
-            secret_hash = get_secret_hash(email)
-            
-            # Register user with Cognito
-            logger.info("Attempting Cognito signup...")
-            
-            response = client.sign_up(
-                ClientId=CLIENT_ID,
-                Username=email,
-                Password=password,
-                SecretHash=secret_hash,
-                UserAttributes=[
-                    {'Name': 'name', 'Value': name},
-                    {'Name': 'email', 'Value': email},
-                    {'Name': 'preferred_username', 'Value': email}
+            client.sign_up(                          # call Cognito signup API
+                ClientId=CLIENT_ID,                  # app client identifier
+                Username=email,                      # email serves as username
+                Password=password,                   # user's chosen password
+                SecretHash=get_secret_hash(email),   # required hash for app client auth
+                UserAttributes=[                     # Cognito user attributes
+                    {'Name': 'name',  'Value': name},    # display name attribute
+                    {'Name': 'email', 'Value': email},   # email attribute (required)
+                    {'Name': 'preferred_username', 'Value': email}  # username defaults to email
                 ]
             )
-            
-            logger.info(f"Cognito signup response: {response}")
-            
-            session['temp_email'] = email
-            flash('Registration successful! Please check your email for verification code.', 'success')
-            return redirect(url_for('auth.confirm'))
-            
-        except client.exceptions.UsernameExistsException as e:
-            logger.error(f"Username exists error: {str(e)}")
-            flash('An account with this email already exists.', 'danger')
-            return redirect(url_for('auth.signup'))
-        except client.exceptions.InvalidPasswordException as e:
-            logger.error(f"Invalid password error: {str(e)}")
-            flash('Password must be at least 8 characters long and contain numbers, special characters, uppercase and lowercase letters.', 'danger')
-            return redirect(url_for('auth.signup'))
-        except Exception as e:
-            logger.error(f"Unexpected error during signup: {str(e)}", exc_info=True)
-            logger.error(f"Error type: {type(e)}")
-            logger.error(f"Error details: {e.__dict__}")
-            flash(f'Registration error: {str(e)}', 'danger')
-            return redirect(url_for('auth.signup'))
-            
-    return render_template('auth/signup.html')
+            session['temp_email'] = email           # store email for confirmation page
+            flash('Check your email for a code.', 'success')  # show success message
+            return redirect(url_for('auth.confirm')) # redirect to confirmation page
+        except client.exceptions.UsernameExistsException:    # email already registered
+            flash('Email already registered.', 'danger')
+        except client.exceptions.InvalidPasswordException:   # password doesn't meet requirements
+            flash('Password fails complexity rules.', 'danger')
+        except Exception as e:                       # catch-all for other errors
+            logger.error(f"Signup error: {e}", exc_info=True)  # log unexpected errors
+            flash('Registration failed.', 'danger')  # show generic error message
+    return render_template('auth/signup.html')       # show signup form for GET/failed POST
 
-@auth_bp.route('/confirm', methods=['GET', 'POST'])
+# ------------------- EMAIL VERIFICATION ROUTES ---------------------------
+# Manages the email verification process after signup, including code confirmation
+# and code resending functionality.
+
+@auth_bp.route('/confirm', methods=['GET', 'POST'])  # /auth/confirm endpoint definition
 def confirm():
-    """Handle email verification for new users"""
-    if 'temp_email' not in session:
-        flash('Please sign up first.', 'warning')
-        return redirect(url_for('auth.signup'))
-        
-    if request.method == 'POST':
-        code = request.form['code']
-        email = session['temp_email']
-        
+    """Verify email with the code Cognito emailed."""
+    if 'temp_email' not in session:                 # check if user came from signup
+        flash('Please sign up first.', 'warning')   # show warning message
+        return redirect(url_for('auth.signup'))     # redirect to signup page if no email in session
+    if request.method == 'POST':                    # handle confirmation code submission
+        code  = request.form['code']                # get verification code from form
+        email = session['temp_email']               # get stored email from signup
         try:
-            # Calculate secret hash for the confirmation
-            secret_hash = get_secret_hash(email)
-            
-            # Verify the confirmation code with Cognito
-            client.confirm_sign_up(
-                ClientId=CLIENT_ID,
-                Username=email,
-                ConfirmationCode=code,
-                SecretHash=secret_hash  # Add this line
+            client.confirm_sign_up(                 # call Cognito confirmation API
+                ClientId=CLIENT_ID,                 # app client identifier
+                Username=email,                     # email used during signup
+                ConfirmationCode=code,             # code user entered from email
+                SecretHash=get_secret_hash(email)  # required hash for app client auth
             )
-            
-            # Clear temporary email from session
-            session.pop('temp_email', None)
-            
-            flash('Email verified! You can now log in.', 'success')
-            return redirect(url_for('auth.login'))
-            
-        except client.exceptions.CodeMismatchException:
-            flash('Invalid verification code. Please try again.', 'danger')
-        except client.exceptions.ExpiredCodeException:
-            flash('Verification code has expired. Please request a new one.', 'danger')
-        except Exception as e:
-            logger.error(f"Confirmation error: {str(e)}")  # Add logging
-            flash('An error occurred during verification.', 'danger')
-            
-    return render_template('auth/confirm.html')
+            session.pop('temp_email', None)        # remove temporary email from session
+            flash('Email verified! You can now log in.', 'success')  # show success message
+            return redirect(url_for('auth.login'))  # send user to login page
+        except client.exceptions.CodeMismatchException:    # wrong verification code
+            flash('Invalid code.', 'danger')              # show error message
+        except client.exceptions.ExpiredCodeException:     # code has expired
+            flash('Code expired.', 'danger')              # show error message
+        except Exception as e:                            # catch any other errors
+            logger.error(f"Confirm error: {e}", exc_info=True)  # log the error
+            flash('Verification failed.', 'danger')       # show generic error message
+    return render_template('auth/confirm.html')     # show confirmation page for GET/failed POST
 
-@auth_bp.route('/logout')
+# ------------------- SESSION MANAGEMENT ROUTES ---------------------------
+# Handles user logout and session cleanup, ensuring secure termination of user sessions
+# and proper removal of authentication tokens.
+
+@auth_bp.route('/logout')                           # /auth/logout endpoint definition
 def logout():
-    """Handle user logout functionality"""
-    try:
-        # Explicitly remove each session key we set during login
-        session.pop('access_token', None)
-        session.pop('id_token', None)
-        session.pop('refresh_token', None)
-        session.pop('user_name', None)
-        
-        # Clear entire session as backup
-        session.clear()
-        
-        flash('You have been logged out successfully', 'success')
-    except Exception as e:
-        logger.error(f"Logout error: {str(e)}")
-        flash('Error during logout', 'danger')
-    
-    return redirect(url_for('home'))
+    """Clear session and log out user."""
+    for k in ('access_token', 'id_token', 'refresh_token', 'user_name'):  # list of session keys to remove
+        session.pop(k, None)                        # remove each token key safely (None if not found)
+    session.clear()                                 # clear entire session for extra security
+    flash('Logged out.', 'success')                 # show success message to user
+    return redirect(url_for('home'))                # redirect user to home page
 
-@auth_bp.route('/resend-code')
+# ------------------- VERIFICATION SUPPORT ROUTES ---------------------------
+# Provides support functionality for the verification process, such as resending
+# verification codes when they expire or are lost.
+
+@auth_bp.route('/resend-code')                      # /auth/resend-code endpoint definition
 def resend_code():
-    """Resend verification code to user's email"""
-    if 'temp_email' not in session:
-        flash('Please sign up first.', 'warning')
-        return redirect(url_for('auth.signup'))
-        
+    """Send a new verification code email."""
+    if 'temp_email' not in session:                 # check if user has a pending verification
+        flash('Please sign up first.', 'warning')   # show warning if no email in session
+        return redirect(url_for('auth.signup'))     # redirect to signup page
     try:
-        email = session['temp_email']
-        secret_hash = get_secret_hash(email)
-        
-        # Resend confirmation code
-        client.resend_confirmation_code(
-            ClientId=CLIENT_ID,
-            Username=email,
-            SecretHash=secret_hash
+        email = session['temp_email']               # get stored email from signup process
+        client.resend_confirmation_code(            # call Cognito API to resend code
+            ClientId=CLIENT_ID,                     # app client identifier
+            Username=email,                         # email used during signup
+            SecretHash=get_secret_hash(email)       # required hash for app client auth
         )
-        
-        flash('Verification code has been resent to your email.', 'success')
-    except Exception as e:
-        logger.error(f"Error resending code: {str(e)}")
-        flash('Error resending verification code. Please try again.', 'danger')
-        
-    return redirect(url_for('auth.confirm'))
+        flash('Code re‑sent.', 'success')          # show success message to user
+    except Exception as e:                          # catch any Cognito API errors
+        logger.error(f"Resend code error: {e}", exc_info=True)  # log the error details
+        flash('Could not resend code.', 'danger')   # show error message to user
+    return redirect(url_for('auth.confirm'))        # return to confirmation page
 
-# ============================================================================
-# HELPER FUNCTIONS FOR TOKEN MANAGEMENT
-# ============================================================================
+# ------------------- TOKEN UTILITIES ---------------------------
+# Helper functions for managing Cognito tokens, including validation and refresh
+# functionality. These utilities support maintaining active sessions and handling
+# token expiration.
 
-def is_token_valid():
-    """Check if the current session has valid tokens
-    
-    Returns:
-        bool: True if valid tokens exist, False otherwise
-    """
-    return 'access_token' in session and 'id_token' in session
+def is_token_valid() -> bool:                       # helper function to check token presence
+    return 'access_token' in session and 'id_token' in session  # verify both required tokens exist
 
-def refresh_tokens():
-    """Refresh expired access tokens using refresh token
-    
-    Returns:
-        bool: True if refresh successful, False otherwise
-    """
-    if 'refresh_token' not in session:
-        return False
-        
+def refresh_tokens() -> bool:                       # helper function to refresh expired tokens
+    if 'refresh_token' not in session:              # check if refresh token exists
+        return False                                # can't refresh without refresh token
     try:
-        response = client.initiate_auth(
-            ClientId=CLIENT_ID,
-            AuthFlow='REFRESH_TOKEN_AUTH',
-            AuthParameters={
-                'REFRESH_TOKEN': session['refresh_token']
-            }
+        resp = client.initiate_auth(                # call Cognito auth API
+            ClientId=CLIENT_ID,                     # app client identifier
+            AuthFlow='REFRESH_TOKEN_AUTH',          # use refresh token authentication flow
+            AuthParameters={'REFRESH_TOKEN': session['refresh_token']}  # provide refresh token
         )
-        
-        # Update session with new tokens
-        auth_result = response['AuthenticationResult']
-        session['access_token'] = auth_result['AccessToken']
-        session['id_token'] = auth_result['IdToken']
-        return True
-        
-    except Exception as e:
-        print(f"Token refresh error: {str(e)}")
-        return False
+        auth = resp['AuthenticationResult']         # extract new tokens from response
+        session['access_token'] = auth['AccessToken']  # store new access token in session
+        session['id_token']    = auth['IdToken']    # store new ID token in session
+        return True                                 # indicate successful token refresh
+    except Exception as e:                          # handle any Cognito API errors
+        logger.error(f"Token refresh error: {e}", exc_info=True)  # log the error details
+        return False                                # indicate failed token refresh
 
-# ============================================================================
-# HELPER FUNCTIONS (To be implemented)
-# ============================================================================
-
-# TODO: Add helper functions for:
-#   - Password hashing
-#   - Token validation
-#   - Cognito API interactions
-#   - Error handling
 
