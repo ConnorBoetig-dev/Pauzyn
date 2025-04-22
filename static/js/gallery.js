@@ -23,7 +23,10 @@ class GalleryManager {
         this.lightboxNext.addEventListener('click', () => this.navigate(1));
         
         this.lightbox.addEventListener('click', (e) => {
-            if (e.target === this.lightbox) {
+            // Close if clicked element is the lightbox background or lightbox-content
+            // But don't close if clicked on media, navigation arrows, or caption
+            if (e.target === this.lightbox || 
+                e.target.classList.contains('lightbox-content')) {
                 this.closeLightbox();
             }
         });
