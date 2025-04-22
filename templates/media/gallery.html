@@ -24,16 +24,14 @@
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
     gap: 1.5rem;
-    margin-bottom: 2rem;
+    padding: 1rem;
 }
 
 .gallery-item {
-    position: relative;
-    aspect-ratio: 1;
+    background: white;
     border-radius: 8px;
-    overflow: hidden;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    background: #f8f9fa;
+    overflow: hidden;
     transition: transform 0.2s;
 }
 
@@ -42,34 +40,28 @@
     box-shadow: 0 4px 8px rgba(0,0,0,0.15);
 }
 
-.gallery-item img, 
-.gallery-item video {
+.image-container, .video-container {
+    aspect-ratio: 1;
+    overflow: hidden;
+}
+
+.image-container img, .video-container video {
     width: 100%;
     height: 100%;
     object-fit: cover;
 }
 
 .item-info {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
     padding: 0.75rem;
-    background: rgba(0,0,0,0.7);
-    color: white;
-    font-size: 0.9rem;
+    text-align: center;
 }
 
-.item-info .filename {
-    display: block;
-    white-space: nowrap;
+.filename {
+    font-size: 0.9rem;
+    color: #333;
     overflow: hidden;
     text-overflow: ellipsis;
-}
-
-.item-info .upload-date {
-    font-size: 0.8rem;
-    opacity: 0.8;
+    white-space: nowrap;
 }
 
 .load-more {
@@ -112,13 +104,16 @@
         {% for item in initial_items %}
         <div class="gallery-item" data-id="{{ item.id }}">
             {% if item.type == 'image' %}
-            <img src="{{ item.url }}" alt="{{ item.filename }}">
+            <div class="image-container">
+                <img src="{{ item.url }}" alt="{{ item.filename }}">
+            </div>
             {% else %}
-            <video src="{{ item.url }}" controls></video>
+            <div class="video-container">
+                <video src="{{ item.url }}" controls></video>
+            </div>
             {% endif %}
             <div class="item-info">
                 <span class="filename">{{ item.filename }}</span>
-                <span class="upload-date">{{ item.lastModified }}</span>
             </div>
         </div>
         {% endfor %}
@@ -161,18 +156,20 @@ function createGalleryItem(item) {
     
     if (item.type === 'image') {
         div.innerHTML = `
-            <img src="${item.url}" alt="${item.filename}">
+            <div class="image-container">
+                <img src="${item.url}" alt="${item.filename}">
+            </div>
             <div class="item-info">
                 <span class="filename">${item.filename}</span>
-                <span class="upload-date">${item.lastModified}</span>
             </div>
         `;
     } else {
         div.innerHTML = `
-            <video src="${item.url}" controls></video>
+            <div class="video-container">
+                <video src="${item.url}" controls></video>
+            </div>
             <div class="item-info">
                 <span class="filename">${item.filename}</span>
-                <span class="upload-date">${item.lastModified}</span>
             </div>
         `;
     }
@@ -282,4 +279,5 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 {% endblock %}
+
 

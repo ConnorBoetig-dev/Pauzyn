@@ -243,3 +243,28 @@ def gallery_page():
         initial_items=initial_items,
         has_more='last_evaluated_key' in result
     )
+
+@media_bp.route('/api/media/refresh-url/<media_id>')
+@login_required
+def refresh_media_url(media_id):
+    decoded_token = jwt.decode(session['id_token'], options={"verify_signature": False})
+    user_id = decoded_token.get('sub')
+    
+    # Get the media item from DynamoDB
+    media_item = current_app.db_manager.get_media_item(user_id, media_id)
+    
+    if not media_item:
+        return jsonify({'error': 'Media not found'}), 404
+        
+    # Generate a new presigned URL
+    presigned_url = s3_client.generate_presigned_url(
+        'get_object',
+        Params={
+            'Bucket': 'pauzynbucket',
+            'Key': media_item.get('s3_location'),
+            'ResponseContentDisposition': 'inline'
+        },
+        ExpiresIn=3600  # 1 hour
+    )
+    
+    return jsonify({'url': presigned_url})
