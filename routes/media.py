@@ -91,66 +91,155 @@ def get_presigned_url():
 
 # ------------------- S3 UPLOAD COMPLETE CALLBACK ---------------------------
 
-@media_bp.route('/api/media/upload-complete', methods=['POST'])                          # POST after PUT succeeds
+@media_bp.route('/api/media/upload-complete', methods=['POST'])
 @login_required
 def upload_complete():
-    media_id  = request.json.get('mediaId')                                              # DynamoDB media item key
-    file_size = request.json.get('fileSize')                                             # bytes uploaded
-
-    if not media_id or not file_size:
-        return jsonify({'error': 'Missing mediaId or fileSize'}), 400
-
+    media_id = request.json.get('mediaId')
+    file_size = request.json.get('fileSize')
+    
+    print(f"Upload complete - mediaId: {media_id}, size: {file_size}")  # Debug log
+    
     decoded_token = jwt.decode(session['id_token'], options={"verify_signature": False})
     user_id = decoded_token.get('sub')
-
-    # Update media status → "uploaded"
+    
     success = current_app.db_manager.update_media_processing_status(
         user_id=user_id,
         media_id=media_id,
         status='uploaded',
         metadata={'file_size': file_size}
     )
-
-    # Update monthly usage row
-    usage_updated = current_app.db_manager.update_usage_stats(
-        user_id=user_id,
-        file_size=file_size,
-        operation='upload'
-    )
-
-    if success and usage_updated:                                                        # both writes OK
-        return jsonify({'success': True})
-    return jsonify({'error': 'Failed to update media status or usage'}), 500
+    
+    print(f"Status update success: {success}")  # Debug log
+    
+    if not success:
+        return jsonify({'error': 'Failed to update media status'}), 500
+        
+    return jsonify({'success': True})
 
 # ------------------- PAGINATED MEDIA LIST ENDPOINT ---------------------------
 
-@media_bp.route('/api/media/list', methods=['GET'])                                      # GET list w/ ?limit=&lastKey=
+@media_bp.route('/api/media/list', methods=['GET'])
 @login_required
 def list_media():
-    limit    = int(request.args.get('limit', 50))                                        # page size (default 50)
-    last_key = request.args.get('lastKey')                                               # JSON string of last key
+    # Add debug logging
+    decoded_token = jwt.decode(session['id_token'], options={"verify_signature": False})
+    user_id = decoded_token.get('sub')
+    
+    print(f"Fetching media for user: {user_id}")  # Debug log
+    
+    result = current_app.db_manager.get_user_media(
+        user_id=user_id,
+        limit=50
+    )
+    
+    print(f"DB result: {result}")  # Debug log
+    
+    # Ensure we return an empty list if no items
+    if not result or 'items' not in result:
+        return jsonify({'items': [], 'hasMore': False})
+        
+    media_type = request.args.get('type', 'all')  # 'all', 'image', or 'video'
+    sort_by = request.args.get('sort', 'date')    # 'date' or 'name'
+    limit = int(request.args.get('limit', 50))
+    last_key = request.args.get('lastKey')
 
     decoded_token = jwt.decode(session['id_token'], options={"verify_signature": False})
     user_id = decoded_token.get('sub')
 
     if last_key:
         try:
-            last_key = json.loads(last_key)                                             # str → dict for DynamoDB
+            last_key = json.loads(last_key)
         except json.JSONDecodeError:
             return jsonify({'error': 'Invalid lastKey format'}), 400
 
-    result = current_app.db_manager.get_user_media(                                     # query DynamoDB
+    result = current_app.db_manager.get_user_media(
         user_id=user_id,
         limit=limit,
         last_evaluated_key=last_key
     )
 
+    # Transform the items to include presigned URLs for viewing
+    transformed_items = []
+    for item in result.get('items', []):
+        # Only include items that match the type filter
+        if media_type != 'all':
+            if not item.get('file_type', '').startswith(media_type):
+                continue
+
+        # Generate a presigned URL for viewing the media
+        presigned_url = s3_client.generate_presigned_url(
+            'get_object',
+            Params={
+                'Bucket': 'pauzynbucket',
+                'Key': item.get('s3_location')
+            },
+            ExpiresIn=3600  # 1 hour
+        )
+
+        # Transform the item to include URL and format for the UI
+        transformed_item = {
+            'id': item.get('mediaID'),
+            'filename': item.get('file_name'),
+            'type': 'image' if item.get('file_type', '').startswith('image') else 'video',
+            'url': presigned_url,
+            'lastModified': item.get('updated_at'),
+            'size': item.get('file_size', 0)
+        }
+        transformed_items.append(transformed_item)
+
+    # Sort the items
+    if sort_by == 'name':
+        transformed_items.sort(key=lambda x: x.get('filename', ''))
+    else:  # sort by date
+        transformed_items.sort(key=lambda x: x.get('lastModified', ''), reverse=True)
+
     response = {
-        'items': result['items'],                                                       # list of media items
-        'hasMore': 'last_evaluated_key' in result                                        # pagination flag
+        'items': transformed_items,
+        'hasMore': 'last_evaluated_key' in result
     }
 
     if 'last_evaluated_key' in result:
-        response['lastKey'] = json.dumps(result['last_evaluated_key'])                  # encode for query param
+        response['lastKey'] = json.dumps(result['last_evaluated_key'])
 
-    return jsonify(response)                                                             # JSON payload to client
+    return jsonify(response)
+
+@media_bp.route('/gallery')
+@login_required
+def gallery_page():
+    """Render the media gallery interface."""
+    # Add initial data load
+    decoded_token = jwt.decode(session['id_token'], options={"verify_signature": False})
+    user_id = decoded_token.get('sub')
+    
+    # Get initial set of media items
+    result = current_app.db_manager.get_user_media(
+        user_id=user_id,
+        limit=50
+    )
+    
+    # Transform items to include presigned URLs
+    initial_items = []
+    for item in result.get('items', []):
+        presigned_url = s3_client.generate_presigned_url(
+            'get_object',
+            Params={
+                'Bucket': 'pauzynbucket',
+                'Key': item.get('s3_location')
+            },
+            ExpiresIn=3600  # 1 hour
+        )
+        
+        initial_items.append({
+            'id': item.get('mediaID'),
+            'filename': item.get('file_name'),
+            'type': 'image' if item.get('file_type', '').startswith('image') else 'video',
+            'url': presigned_url,
+            'lastModified': item.get('updated_at'),
+            'size': item.get('file_size', 0)
+        })
+    
+    return render_template(
+        'media/gallery.html',
+        initial_items=initial_items,
+        has_more='last_evaluated_key' in result
+    )

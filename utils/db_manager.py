@@ -105,23 +105,34 @@ class DynamoDBManager:
         """Get user's media items with pagination."""
         try:
             params = {
-                'KeyConditionExpression': 'userID = :userID',  # Changed from user_id to userID
-                'ExpressionAttributeValues': {':userID': user_id},  # Changed key name
-                'Limit': limit
+                'TableName': self.media_table.name,
+                'KeyConditionExpression': '#uid = :uid',
+                'ExpressionAttributeNames': {
+                    '#uid': 'userID'
+                },
+                'ExpressionAttributeValues': {
+                    ':uid': user_id
+                },
+                'Limit': limit,
+                'ScanIndexForward': False  # Sort in descending order
             }
-
+            
             if last_evaluated_key:
                 params['ExclusiveStartKey'] = last_evaluated_key
-
+            
+            print(f"DynamoDB Query params: {params}")  # Debug log
+            
             response = self.media_table.query(**params)
+            
+            print(f"DynamoDB Response: {response}")  # Debug log
             
             return {
                 'items': response.get('Items', []),
                 'last_evaluated_key': response.get('LastEvaluatedKey')
             }
-        except ClientError as e:
-            logger.error(f"Failed to get user media: {str(e)}")
-            return {'items': []}
+        except Exception as e:
+            print(f"Error in get_user_media: {str(e)}")  # Debug log
+            return {'items': [], 'last_evaluated_key': None}
 
     # ------------------- USAGE TRACKING OPERATIONS ---------------------------
     # Methods for tracking user storage usage and upload counts
@@ -206,6 +217,9 @@ class DynamoDBManager:
         except Exception as e:
             logger.error(f"Test failed: {str(e)}")
             return False
+
+
+
 
 
 

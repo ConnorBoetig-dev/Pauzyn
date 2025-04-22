@@ -1,69 +1,94 @@
 {% extends "base.html" %}
 
 {% block styles %}
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@8/swiper-bundle.min.css">
 <style>
 .gallery-container {
     padding: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.gallery-controls {
+    margin-bottom: 2rem;
+    display: flex;
+    gap: 1rem;
+}
+
+.gallery-controls select {
+    padding: 0.5rem;
+    border-radius: 4px;
+    border: 1px solid #ddd;
 }
 
 .gallery-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 1rem;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 1.5rem;
     margin-bottom: 2rem;
 }
 
 .gallery-item {
     position: relative;
     aspect-ratio: 1;
-    cursor: pointer;
     border-radius: 8px;
     overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     background: #f8f9fa;
+    transition: transform 0.2s;
 }
 
-.gallery-item img, .gallery-item video {
+.gallery-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.gallery-item img, 
+.gallery-item video {
     width: 100%;
     height: 100%;
     object-fit: cover;
 }
 
-.gallery-controls {
-    margin-bottom: 2rem;
-}
-
-/* Modal styles */
-.media-modal .modal-dialog {
-    max-width: 90vw;
-    margin: 1.75rem auto;
-}
-
-.swiper {
-    width: 100%;
-    height: 80vh;
-}
-
-.swiper-slide {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.swiper-slide img, .swiper-slide video {
-    max-width: 100%;
-    max-height: 100%;
-    object-fit: contain;
-}
-
-.media-info {
+.item-info {
     position: absolute;
     bottom: 0;
     left: 0;
     right: 0;
+    padding: 0.75rem;
     background: rgba(0,0,0,0.7);
     color: white;
-    padding: 1rem;
+    font-size: 0.9rem;
+}
+
+.item-info .filename {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.item-info .upload-date {
+    font-size: 0.8rem;
+    opacity: 0.8;
+}
+
+.load-more {
+    text-align: center;
+    margin: 2rem 0;
+}
+
+.load-more button {
+    padding: 0.75rem 2rem;
+    border-radius: 4px;
+    border: none;
+    background: #007bff;
+    color: white;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.load-more button:hover {
+    background: #0056b3;
 }
 </style>
 {% endblock %}
@@ -71,42 +96,90 @@
 {% block content %}
 <div class="gallery-container">
     <div class="gallery-controls">
-        <div class="row">
-            <div class="col-md-6">
-                <select class="form-select" id="filterType">
-                    <option value="all">All Files</option>
-                    <option value="image">Images</option>
-                    <option value="video">Videos</option>
-                </select>
-            </div>
-            <div class="col-md-6">
-                <select class="form-select" id="sortBy">
-                    <option value="date">Sort by Date</option>
-                    <option value="name">Sort by Name</option>
-                </select>
+        <select id="mediaTypeFilter">
+            <option value="all">All</option>
+            <option value="image">Images</option>
+            <option value="video">Videos</option>
+        </select>
+        
+        <select id="sortOrder">
+            <option value="date">Sort by Date</option>
+            <option value="name">Sort by Name</option>
+        </select>
+    </div>
+
+    <div id="gallery-grid" class="gallery-grid">
+        {% for item in initial_items %}
+        <div class="gallery-item" data-id="{{ item.id }}">
+            {% if item.type == 'image' %}
+            <img src="{{ item.url }}" alt="{{ item.filename }}">
+            {% else %}
+            <video src="{{ item.url }}" controls></video>
+            {% endif %}
+            <div class="item-info">
+                <span class="filename">{{ item.filename }}</span>
+                <span class="upload-date">{{ item.lastModified }}</span>
             </div>
         </div>
+        {% endfor %}
     </div>
-    
-    <div class="gallery-grid" id="galleryGrid"></div>
+
+    {% if has_more %}
+    <div id="load-more" class="load-more">
+        <button onclick="loadMore()">Load More</button>
+    </div>
+    {% endif %}
 </div>
 
-<!-- Modal -->
-<div class="modal fade media-modal" id="mediaModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-body p-0">
-                <button type="button" class="btn-close position-absolute top-0 end-0 m-3" data-bs-dismiss="modal"></button>
-                <div class="swiper">
-                    <div class="swiper-wrapper"></div>
-                    <div class="swiper-pagination"></div>
-                    <div class="swiper-button-prev"></div>
-                    <div class="swiper-button-next"></div>
-                </div>
+<script>
+// Add JavaScript for handling filters and pagination
+document.getElementById('mediaTypeFilter').addEventListener('change', refreshGallery);
+document.getElementById('sortOrder').addEventListener('change', refreshGallery);
+
+function refreshGallery() {
+    const mediaType = document.getElementById('mediaTypeFilter').value;
+    const sortBy = document.getElementById('sortOrder').value;
+    
+    fetch(`/api/media/list?type=${mediaType}&sort=${sortBy}`)
+        .then(response => response.json())
+        .then(data => {
+            const gallery = document.getElementById('gallery-grid');
+            gallery.innerHTML = ''; // Clear existing items
+            
+            data.items.forEach(item => {
+                const itemElement = createGalleryItem(item);
+                gallery.appendChild(itemElement);
+            });
+        })
+        .catch(error => console.error('Error refreshing gallery:', error));
+}
+
+function createGalleryItem(item) {
+    const div = document.createElement('div');
+    div.className = 'gallery-item';
+    div.dataset.id = item.id;
+    
+    if (item.type === 'image') {
+        div.innerHTML = `
+            <img src="${item.url}" alt="${item.filename}">
+            <div class="item-info">
+                <span class="filename">${item.filename}</span>
+                <span class="upload-date">${item.lastModified}</span>
             </div>
-        </div>
-    </div>
-</div>
+        `;
+    } else {
+        div.innerHTML = `
+            <video src="${item.url}" controls></video>
+            <div class="item-info">
+                <span class="filename">${item.filename}</span>
+                <span class="upload-date">${item.lastModified}</span>
+            </div>
+        `;
+    }
+    
+    return div;
+}
+</script>
 {% endblock %}
 
 {% block scripts %}
@@ -209,3 +282,4 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 {% endblock %}
+
