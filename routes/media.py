@@ -9,6 +9,8 @@ from uuid import uuid4
 from datetime import datetime
 from functools import wraps
 import jwt
+from flask import current_app
+import json
 
 # ------------------- AUTHENTICATION DECORATOR ---------------------------
 # Custom decorator that ensures users are logged in before accessing
@@ -55,46 +57,109 @@ def upload_page():
 @media_bp.route('/api/media/presigned-url', methods=['POST'])
 @login_required
 def get_presigned_url():
-    # Extract file information from request
     file_name = request.json.get('fileName')
     file_type = request.json.get('fileType')
     
-    # Validate required parameters
     if not file_name or not file_type:
         return jsonify({'error': 'Missing fileName or fileType'}), 400
     
-    # Get user ID from session token for user-specific storage
     decoded_token = jwt.decode(session['id_token'], options={"verify_signature": False})
     user_id = decoded_token.get('sub')
     
-    # Generate unique file path with timestamp and UUID
     timestamp = datetime.utcnow().strftime('%Y%m%d-%H%M%S')
     unique_id = str(uuid4())[:8]
     file_key = f"users/{user_id}/{timestamp}-{unique_id}-{file_name}"
     
     try:
-        # Generate temporary signed URL for direct upload
         presigned_url = s3_client.generate_presigned_url(
             'put_object',
             Params={
                 'Bucket': 'pauzynbucket',
                 'Key': file_key,
-                'ContentType': file_type  # Ensures proper content type on S3
+                'ContentType': file_type
             },
-            ExpiresIn=300,  # URL expires in 5 minutes
+            ExpiresIn=300,
             HttpMethod='PUT'
         )
         
-        # Return URL and file key to client
+        # Record pending upload in DynamoDB
+        media_id = current_app.db_manager.record_media_upload(
+            user_id=user_id,
+            file_name=file_name,
+            file_type=file_type,
+            s3_location=file_key
+        )
+        
+        if not media_id:
+            raise Exception("Failed to record media upload")
+        
         return jsonify({
             'presignedUrl': presigned_url,
-            'fileKey': file_key
+            'fileKey': file_key,
+            'mediaId': media_id
         })
     except Exception as e:
-        # Log and return any errors during URL generation
         print(f"Error generating presigned URL: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+@media_bp.route('/api/media/upload-complete', methods=['POST'])
+@login_required
+def upload_complete():
+    media_id = request.json.get('mediaId')
+    file_size = request.json.get('fileSize')
+    
+    if not media_id or not file_size:
+        return jsonify({'error': 'Missing mediaId or fileSize'}), 400
+    
+    decoded_token = jwt.decode(session['id_token'], options={"verify_signature": False})
+    user_id = decoded_token.get('sub')
+    
+    # Update media status
+    success = current_app.db_manager.update_media_processing_status(
+        user_id=user_id,
+        media_id=media_id,
+        status='uploaded',
+        metadata={'file_size': file_size}
+    )
+    
+    # Track usage statistics
+    usage_updated = current_app.db_manager.update_usage_stats(
+        user_id=user_id,
+        file_size=file_size,
+        operation='upload'
+    )
+    
+    if success and usage_updated:
+        return jsonify({'success': True})
+    return jsonify({'error': 'Failed to update media status or usage'}), 500
 
-
+@media_bp.route('/api/media/list', methods=['GET'])
+@login_required
+def list_media():
+    limit = int(request.args.get('limit', 50))
+    last_key = request.args.get('lastKey')
+    
+    decoded_token = jwt.decode(session['id_token'], options={"verify_signature": False})
+    user_id = decoded_token.get('sub')
+    
+    if last_key:
+        try:
+            last_key = json.loads(last_key)
+        except json.JSONDecodeError:
+            return jsonify({'error': 'Invalid lastKey format'}), 400
+    
+    result = current_app.db_manager.get_user_media(
+        user_id=user_id,
+        limit=limit,
+        last_evaluated_key=last_key
+    )
+    
+    response = {
+        'items': result['items'],
+        'hasMore': 'last_evaluated_key' in result
+    }
+    
+    if 'last_evaluated_key' in result:
+        response['lastKey'] = json.dumps(result['last_evaluated_key'])
+    
 

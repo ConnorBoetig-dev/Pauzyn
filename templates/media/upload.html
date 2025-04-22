@@ -137,7 +137,7 @@ class UploadManager {
             
             if (!response.ok) throw new Error('Failed to get upload URL');
             
-            const { presignedUrl, fileKey } = await response.json();
+            const { presignedUrl, fileKey, mediaId } = await response.json();
 
             // Upload to S3
             const uploadResponse = await fetch(presignedUrl, {
@@ -149,8 +149,23 @@ class UploadManager {
             });
 
             if (!uploadResponse.ok) {
-                console.error('Upload failed:', await uploadResponse.text());
                 throw new Error('Upload failed');
+            }
+
+            // Notify backend that upload is complete
+            const completeResponse = await fetch('/api/media/upload-complete', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    mediaId: mediaId,
+                    fileSize: file.size
+                })
+            });
+
+            if (!completeResponse.ok) {
+                throw new Error('Failed to complete upload');
             }
 
             uploadItem.querySelector('.upload-status').textContent = 'Complete';
