@@ -176,6 +176,32 @@ function createGalleryItem(item) {
     
     return div;
 }
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Print all image URLs to console
+    console.log('Checking all media URLs:');
+    const mediaElements = document.querySelectorAll('img, video');
+    mediaElements.forEach((element, index) => {
+        console.log(`Media ${index}:`, element.src);
+        
+        // Add error handling for images
+        if (element.tagName === 'IMG') {
+            element.onerror = function() {
+                console.error('Failed to load image:', this.src);
+                // Try to fetch the URL to see specific error
+                fetch(this.src)
+                    .then(response => {
+                        if (!response.ok) {
+                            console.error(`HTTP error ${response.status}: ${response.statusText}`);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Fetch error:', error);
+                    });
+            };
+        }
+    });
+});
 </script>
 {% endblock %}
 
@@ -279,5 +305,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 {% endblock %}
+
 
 
