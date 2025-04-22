@@ -11,7 +11,6 @@
 #   - flash: Function to send temporary messages to the next request
 import logging
 from flask import Flask, render_template
-from flask_login import LoginManager
 
 # os: Module for interacting with operating system
 #   - Used here primarily for accessing environment variables
@@ -58,18 +57,6 @@ app = Flask(__name__)
 #   - Flash messages
 # IMPORTANT: Should be kept secret and not committed to version control
 app.secret_key = os.getenv('APP_SECRET_KEY')
-
-# Initialize Flask-Login
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = 'auth.login'  # Specify the login route
-
-# Add this user loader function
-@login_manager.user_loader
-def load_user(user_id):
-    # You'll need to implement this based on your user model
-    # For now, we'll return None
-    return None
 
 # ============================================================================
 # BLUEPRINT REGISTRATION
