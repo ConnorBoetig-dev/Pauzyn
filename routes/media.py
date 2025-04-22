@@ -217,9 +217,6 @@ def gallery_page():
             },
             ExpiresIn=3600  # 1 hour
         )
-        
-        print(f"Gallery page presigned URL: {presigned_url}")  # Debug log
-        print(f"For file: {item.get('file_name')} of type: {item.get('file_type')}")  # Debug log
 
         initial_items.append({
             'id': item.get('mediaID'),
@@ -230,10 +227,16 @@ def gallery_page():
             'size': item.get('file_size', 0)
         })
     
+    # Prepare initial data for JavaScript
+    initial_data = {
+        'lastKey': json.dumps(result.get('last_evaluated_key')) if 'last_evaluated_key' in result else None
+    }
+    
     return render_template(
         'media/gallery.html',
         initial_items=initial_items,
-        has_more='last_evaluated_key' in result
+        has_more='last_evaluated_key' in result,
+        initial_data=initial_data
     )
 
 @media_bp.route('/api/media/refresh-url/<media_id>')

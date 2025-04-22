@@ -1,46 +1,142 @@
 class GalleryManager {
     constructor() {
+        this.lightbox = document.getElementById('lightbox');
+        this.lightboxMediaContainer = document.querySelector('.lightbox-media-container');
+        this.lightboxCaption = document.querySelector('.lightbox-caption');
+        this.lightboxCounter = document.querySelector('.lightbox-counter');
+        this.lightboxClose = document.querySelector('.lightbox-close');
+        this.lightboxPrev = document.querySelector('.lightbox-prev');
+        this.lightboxNext = document.querySelector('.lightbox-next');
+        
+        this.currentIndex = 0;
+        this.galleryItems = [];
         this.refreshInterval = 30 * 60 * 1000; // 30 minutes
+        
+        this.initializeEventListeners();
         this.setupRefreshTimer();
         this.setupVisibilityHandler();
-        this.currentIndex = 0;
-        this.items = [];
-        this.setupControls();
-        
-        // Hide modal and controls initially
-        const modal = document.getElementById('mediaModal');
-        if (modal) {
-            modal.style.display = 'none';
-            // Hide counter and navigation initially
-            const counter = modal.querySelector('.modal-counter');
-            const navigation = modal.querySelector('.modal-navigation');
-            if (counter) counter.style.display = 'none';
-            if (navigation) navigation.style.display = 'none';
-        }
     }
 
-    setupControls() {
+    initializeEventListeners() {
+        this.lightboxClose.addEventListener('click', () => this.closeLightbox());
+        this.lightboxPrev.addEventListener('click', () => this.navigate(-1));
+        this.lightboxNext.addEventListener('click', () => this.navigate(1));
+        
+        this.lightbox.addEventListener('click', (e) => {
+            if (e.target === this.lightbox) {
+                this.closeLightbox();
+            }
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (!this.lightbox.classList.contains('active')) return;
+            
+            if (e.key === 'Escape') {
+                this.closeLightbox();
+            } else if (e.key === 'ArrowLeft') {
+                this.navigate(-1);
+            } else if (e.key === 'ArrowRight') {
+                this.navigate(1);
+            }
+        });
+
+        // Re-attach listeners when gallery items change
         const mediaTypeFilter = document.getElementById('mediaTypeFilter');
         const sortOrder = document.getElementById('sortOrder');
         
         if (mediaTypeFilter) {
-            mediaTypeFilter.addEventListener('change', () => this.refreshGallery());
+            mediaTypeFilter.addEventListener('change', () => {
+                setTimeout(() => this.attachItemClickListeners(), 500);
+            });
         }
         
         if (sortOrder) {
-            sortOrder.addEventListener('change', () => this.refreshGallery());
+            sortOrder.addEventListener('change', () => {
+                setTimeout(() => this.attachItemClickListeners(), 500);
+            });
         }
     }
 
+    openLightbox(index) {
+        this.galleryItems = Array.from(document.querySelectorAll('.gallery-item'));
+        if (this.galleryItems.length === 0) return;
+        
+        this.currentIndex = index;
+        this.updateLightboxContent();
+        
+        this.lightbox.classList.add('active');
+        document.body.style.overflow = 'hidden';
+        
+        const videoElement = this.lightboxMediaContainer.querySelector('video');
+        if (videoElement) {
+            videoElement.play();
+        }
+    }
+
+    closeLightbox() {
+        const videoElement = this.lightboxMediaContainer.querySelector('video');
+        if (videoElement) {
+            videoElement.pause();
+        }
+        
+        this.lightbox.classList.remove('active');
+        document.body.style.overflow = '';
+        this.lightboxMediaContainer.innerHTML = '';
+    }
+
+    navigate(direction) {
+        const videoElement = this.lightboxMediaContainer.querySelector('video');
+        if (videoElement) {
+            videoElement.pause();
+        }
+        
+        this.currentIndex = (this.currentIndex + direction + this.galleryItems.length) % this.galleryItems.length;
+        this.updateLightboxContent();
+        
+        const newVideoElement = this.lightboxMediaContainer.querySelector('video');
+        if (newVideoElement) {
+            newVideoElement.play();
+        }
+    }
+
+    updateLightboxContent() {
+        const item = this.galleryItems[this.currentIndex];
+        const type = item.dataset.type;
+        const url = item.dataset.url;
+        const filename = item.dataset.filename;
+        
+        this.lightboxMediaContainer.innerHTML = '';
+        
+        if (type === 'image') {
+            const img = document.createElement('img');
+            img.src = url;
+            img.alt = filename;
+            this.lightboxMediaContainer.appendChild(img);
+        } else {
+            const video = document.createElement('video');
+            video.src = url;
+            video.controls = true;
+            video.autoplay = true;
+            this.lightboxMediaContainer.appendChild(video);
+        }
+        
+        this.lightboxCaption.textContent = filename;
+        this.lightboxCounter.textContent = `${this.currentIndex + 1} / ${this.galleryItems.length}`;
+    }
+
+    attachItemClickListeners() {
+        const items = document.querySelectorAll('.gallery-item');
+        items.forEach((item, index) => {
+            item.addEventListener('click', () => this.openLightbox(index));
+        });
+    }
+
     setupRefreshTimer() {
-        // Initial refresh after 25 minutes
         setTimeout(() => this.refreshUrls(), 25 * 60 * 1000);
-        // Then refresh every 30 minutes
         setInterval(() => this.refreshUrls(), this.refreshInterval);
     }
 
     setupVisibilityHandler() {
-        // Refresh URLs when page becomes visible after being hidden
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') {
                 this.refreshUrls();
@@ -61,108 +157,20 @@ class GalleryManager {
                     if (mediaElement) {
                         mediaElement.src = data.url;
                     }
+                    item.dataset.url = data.url;
                 }
             } catch (error) {
                 console.error('Failed to refresh URL for item:', mediaId, error);
             }
         });
-
+        
         await Promise.all(refreshPromises);
     }
-
-    openModal(index) {
-        const modal = document.getElementById('mediaModal');
-        const mediaContainer = modal.querySelector('.modal-media-container');
-        const item = this.items[index];
-        this.currentIndex = index;
-
-        // Clear previous content
-        mediaContainer.innerHTML = '';
-
-        // Create media element
-        let mediaElement;
-        if (item.type === 'image') {
-            mediaElement = document.createElement('img');
-            mediaElement.src = item.url;
-            mediaElement.alt = item.filename;
-        } else {
-            mediaElement = document.createElement('video');
-            mediaElement.src = item.url;
-            mediaElement.controls = true;
-        }
-
-        // Add media to container
-        mediaContainer.appendChild(mediaElement);
-        
-        // Show modal and controls
-        modal.style.display = 'block';
-        const counter = modal.querySelector('.modal-counter');
-        const navigation = modal.querySelector('.modal-navigation');
-        if (counter) {
-            counter.style.display = 'block';
-            counter.textContent = `${index + 1} / ${this.items.length}`;
-        }
-        if (navigation) navigation.style.display = 'flex';
-    }
-
-    closeModal() {
-        const modal = document.getElementById('mediaModal');
-        if (modal) {
-            modal.style.display = 'none';
-            // Hide counter and navigation when closing
-            const counter = modal.querySelector('.modal-counter');
-            const navigation = modal.querySelector('.modal-navigation');
-            if (counter) counter.style.display = 'none';
-            if (navigation) counter.style.display = 'none';
-        }
-    }
 }
 
-// Function to attach click listeners to gallery items
-function attachItemClickListeners() {
-    const galleryItems = document.querySelectorAll('.gallery-item');
-    const modal = document.getElementById('mediaModal');
-    const closeBtn = modal.querySelector('.modal-close');
-    const prevBtn = modal.querySelector('.modal-prev');
-    const nextBtn = modal.querySelector('.modal-next');
-    
-    const gallery = new GalleryManager();
-    gallery.items = Array.from(galleryItems).map(item => ({
-        id: item.dataset.id,
-        type: item.dataset.type,
-        url: item.dataset.url,
-        filename: item.dataset.filename
-    }));
-
-    galleryItems.forEach((item, index) => {
-        item.addEventListener('click', () => gallery.openModal(index));
-    });
-
-    if (closeBtn) closeBtn.addEventListener('click', () => gallery.closeModal());
-    if (prevBtn) prevBtn.addEventListener('click', () => {
-        if (gallery.currentIndex > 0) {
-            gallery.openModal(gallery.currentIndex - 1);
-        }
-    });
-    if (nextBtn) nextBtn.addEventListener('click', () => {
-        if (gallery.currentIndex < gallery.items.length - 1) {
-            gallery.openModal(gallery.currentIndex + 1);
-        }
-    });
-
-    window.addEventListener('click', (event) => {
-        if (event.target === modal) {
-            gallery.closeModal();
-        }
-    });
-}
-
-// Initialize when the page loads
+// Initialize when the DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     const gallery = new GalleryManager();
-    attachItemClickListeners();
+    gallery.attachItemClickListeners();
 });
-
-
-
 

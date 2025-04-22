@@ -33,6 +33,7 @@
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     overflow: hidden;
     transition: transform 0.2s;
+    cursor: pointer;
 }
 
 .gallery-item:hover {
@@ -64,6 +65,125 @@
     white-space: nowrap;
 }
 
+/* Lightbox Styles */
+.lightbox {
+    display: none;
+    position: fixed;
+    z-index: 9999;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.9);
+    overflow: hidden;
+}
+
+.lightbox-content {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.lightbox-media-container {
+    max-width: 90%;
+    max-height: 80%;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.lightbox-media-container img {
+    max-width: 100%;
+    max-height: 80vh;
+    object-fit: contain;
+}
+
+.lightbox-media-container video {
+    max-width: 100%;
+    max-height: 80vh;
+    object-fit: contain;
+}
+
+.lightbox-close {
+    position: absolute;
+    top: 15px;
+    right: 25px;
+    color: #f1f1f1;
+    font-size: 40px;
+    font-weight: bold;
+    cursor: pointer;
+    z-index: 1010;
+    transition: 0.3s;
+}
+
+.lightbox-close:hover {
+    color: #bbb;
+    transform: scale(1.1);
+}
+
+.lightbox-nav {
+    position: absolute;
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    padding: 0 40px;
+    box-sizing: border-box;
+    z-index: 1005;
+}
+
+.lightbox-prev, .lightbox-next {
+    background-color: rgba(0, 0, 0, 0.3);
+    color: white;
+    font-size: 24px;
+    font-weight: bold;
+    padding: 15px 20px;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: 0.3s;
+}
+
+.lightbox-prev:hover, .lightbox-next:hover {
+    background-color: rgba(0, 0, 0, 0.7);
+}
+
+.lightbox-counter {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    color: white;
+    font-size: 16px;
+    z-index: 1010;
+}
+
+.lightbox-caption {
+    color: white;
+    position: absolute;
+    bottom: 20px;
+    text-align: center;
+    padding: 10px;
+    font-size: 18px;
+    width: 100%;
+    max-width: 80%;
+    background-color: rgba(0, 0, 0, 0.5);
+    border-radius: 4px;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.lightbox.active {
+    display: block;
+    animation: fadeIn 0.3s;
+}
+
 .load-more {
     text-align: center;
     margin: 2rem 0;
@@ -81,13 +201,6 @@
 
 .load-more button:hover {
     background: #0056b3;
-}
-
-.modal-counter {
-    color: white;
-    position: absolute;
-    top: 20px;
-    left: 20px;
 }
 </style>
 {% endblock %}
@@ -126,6 +239,9 @@
         {% endfor %}
     </div>
 
+    <!-- Add this after the gallery-grid div -->
+    <div id="initial-data" style="display:none;" data-last-key="{{ initial_data.lastKey if initial_data and initial_data.lastKey else '' }}"></div>
+
     {% if has_more %}
     <div id="load-more" class="load-more">
         <button onclick="loadMore()">Load More</button>
@@ -133,21 +249,19 @@
     {% endif %}
 </div>
 
-<!-- Lightbox Modal -->
-<div id="mediaModal" class="media-modal">
-    <span class="modal-close">&times;</span>
-    <div class="modal-content">
-        <span class="modal-counter">1 / 1</span>
-        <div class="modal-media-container">
-            <!-- Media will be inserted here -->
+<!-- New Lightbox Implementation -->
+<div id="lightbox" class="lightbox">
+    <div class="lightbox-content">
+        <span class="lightbox-close">&times;</span>
+        <div class="lightbox-counter">1 / 6</div>
+        <div class="lightbox-nav">
+            <button class="lightbox-prev">&larr;</button>
+            <button class="lightbox-next">&rarr;</button>
         </div>
-        <div class="modal-nav">
-            <span class="modal-prev">&#10094;</span>
-            <span class="modal-next">&#10095;</span>
+        <div class="lightbox-media-container">
+            <!-- Media will be inserted here dynamically -->
         </div>
-        <div class="modal-info">
-            <!-- Filename and other info will go here -->
-        </div>
+        <div class="lightbox-caption"></div>
     </div>
 </div>
 
@@ -211,185 +325,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/gallery.js') }}"></script>
-<script>
-let lastEvaluatedKey = null;
-
-function loadMore() {
-    const mediaType = document.getElementById('mediaTypeFilter').value;
-    const sortBy = document.getElementById('sortOrder').value;
-    
-    if (!lastEvaluatedKey) {
-        console.error("No last evaluated key available");
-        return;
-    }
-    
-    // Encode the lastEvaluatedKey for URL
-    const encodedKey = encodeURIComponent(JSON.stringify(lastEvaluatedKey));
-    
-    fetch(`/api/media/list?type=${mediaType}&sort=${sortBy}&lastKey=${encodedKey}`)
-        .then(response => response.json())
-        .then(data => {
-            const gallery = document.getElementById('gallery-grid');
-            
-            // Append new items
-            data.items.forEach(item => {
-                const itemElement = createGalleryItem(item);
-                gallery.appendChild(itemElement);
-            });
-            
-            // Update last key for next pagination
-            lastEvaluatedKey = data.lastKey ? JSON.parse(data.lastKey) : null;
-            
-            // Hide "Load More" button if no more items
-            if (!data.hasMore) {
-                document.getElementById('load-more').style.display = 'none';
-            }
-            
-            // Reattach event listeners for new items
-            attachItemClickListeners();
-        })
-        .catch(error => console.error('Error loading more items:', error));
-}
-
-function refreshGallery() {
-    const mediaType = document.getElementById('mediaTypeFilter').value;
-    const sortBy = document.getElementById('sortOrder').value;
-    
-    fetch(`/api/media/list?type=${mediaType}&sort=${sortBy}`)
-        .then(response => response.json())
-        .then(data => {
-            const gallery = document.getElementById('gallery-grid');
-            gallery.innerHTML = ''; // Clear existing items
-            
-            data.items.forEach(item => {
-                const itemElement = createGalleryItem(item);
-                gallery.appendChild(itemElement);
-            });
-            
-            // Update pagination state
-            lastEvaluatedKey = data.lastKey ? JSON.parse(data.lastKey) : null;
-            
-            // Show/hide "Load More" button
-            const loadMoreBtn = document.getElementById('load-more');
-            if (loadMoreBtn) {
-                loadMoreBtn.style.display = data.hasMore ? 'block' : 'none';
-            }
-            
-            // Reattach event listeners
-            attachItemClickListeners();
-        })
-        .catch(error => console.error('Error refreshing gallery:', error));
-}
-
-// Initialize lastEvaluatedKey from server-side data
-document.addEventListener('DOMContentLoaded', function() {
-    // Get initial lastKey from the server-rendered data
-    const initialData = {{ initial_data|tojson|safe if initial_data else 'null' }};
-    if (initialData && initialData.lastKey) {
-        lastEvaluatedKey = JSON.parse(initialData.lastKey);
-    }
-    
-    attachItemClickListeners();
-    new GalleryManager();
-});
-
-class GalleryManager {
-    constructor() {
-        this.mediaFiles = [];
-        this.swiper = null;
-        this.modal = new bootstrap.Modal(document.getElementById('mediaModal'));
-        this.setupEventListeners();
-        this.loadMedia();
-    }
-
-    setupEventListeners() {
-        document.getElementById('filterType').addEventListener('change', () => this.loadMedia());
-        document.getElementById('sortBy').addEventListener('change', () => this.loadMedia());
-    }
-
-    async loadMedia() {
-        const filterType = document.getElementById('filterType').value;
-        const sortBy = document.getElementById('sortBy').value;
-        
-        try {
-            const response = await fetch(`/api/media/list?type=${filterType}&sort=${sortBy}`);
-            this.mediaFiles = await response.json();
-            this.renderGallery();
-        } catch (error) {
-            console.error('Error loading media:', error);
-        }
-    }
-
-    renderGallery() {
-        const grid = document.getElementById('galleryGrid');
-        grid.innerHTML = '';
-        
-        this.mediaFiles.forEach((file, index) => {
-            const item = document.createElement('div');
-            item.className = 'gallery-item';
-            
-            if (file.type === 'image') {
-                item.innerHTML = `<img src="${file.url}" alt="${file.filename}">`;
-            } else if (file.type === 'video') {
-                item.innerHTML = `<video src="${file.url}"></video>`;
-            }
-            
-            item.addEventListener('click', () => this.openModal(index));
-            grid.appendChild(item);
-        });
-    }
-
-    openModal(index) {
-        const swiperWrapper = document.querySelector('.swiper-wrapper');
-        swiperWrapper.innerHTML = '';
-        
-        this.mediaFiles.forEach(file => {
-            const slide = document.createElement('div');
-            slide.className = 'swiper-slide';
-            
-            let mediaElement;
-            if (file.type === 'image') {
-                mediaElement = `<img src="${file.url}" alt="${file.filename}">`;
-            } else if (file.type === 'video') {
-                mediaElement = `<video src="${file.url}" controls></video>`;
-            }
-            
-            slide.innerHTML = `
-                ${mediaElement}
-                <div class="media-info">
-                    <h5>${file.filename}</h5>
-                    <p>Uploaded: ${new Date(file.lastModified).toLocaleDateString()}</p>
-                    <p>Size: ${(file.size / 1024 / 1024).toFixed(2)} MB</p>
-                </div>
-            `;
-            swiperWrapper.appendChild(slide);
-        });
-        
-        if (!this.swiper) {
-            this.swiper = new Swiper('.swiper', {
-                navigation: {
-                    nextEl: '.swiper-button-next',
-                    prevEl: '.swiper-button-prev',
-                },
-                pagination: {
-                    el: '.swiper-pagination',
-                    type: 'fraction',
-                },
-            });
-        } else {
-            this.swiper.update();
-        }
-        
-        this.swiper.slideTo(index, 0);
-        this.modal.show();
-    }
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-    new GalleryManager();
-});
-</script>
 {% endblock %}
+
+
+
+
 
 
 
