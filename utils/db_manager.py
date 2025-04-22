@@ -29,19 +29,21 @@ class DynamoDBManager:
     def create_user(self, user_id, email, name):
         """Create a new user record in DynamoDB."""
         try:
-            self.users_table.put_item(              # attempt to create user record
+            timestamp = datetime.utcnow().isoformat()
+            self.users_table.put_item(
                 Item={
-                    'user_ID': user_id,             # unique identifier for user
-                    'email': email,                 # user's email address
-                    'name': name,                   # user's display name
-                    'created_at': datetime.utcnow().isoformat(),  # creation timestamp
-                    'updated_at': datetime.utcnow().isoformat()   # last update timestamp
+                    'userID': user_id,          # Partition key
+                    'SK': 'PROFILE',            # Sort key
+                    'email': email,
+                    'name': name,
+                    'created_at': timestamp,
+                    'updated_at': timestamp
                 }
             )
-            return True                             # indicate successful creation
+            return True
         except ClientError as e:
-            logger.error(f"Failed to create user: {str(e)}")  # log any AWS errors
-            return False                            # indicate failed creation
+            logger.error(f"Failed to create user: {str(e)}")
+            return False
 
     # ------------------- MEDIA MANAGEMENT OPERATIONS ---------------------------
     # Methods for tracking and updating media uploads, including status updates
@@ -204,6 +206,7 @@ class DynamoDBManager:
         except Exception as e:
             logger.error(f"Test failed: {str(e)}")
             return False
+
 
 
 

@@ -1,5 +1,5 @@
 import logging                                      # std‑lib logging for debug/info
-from flask import Blueprint, render_template, redirect, url_for, request, flash, session  # Flask helpers
+from flask import Blueprint, render_template, redirect, url_for, request, flash, session, current_app  # Flask helpers
 import os                                           # env‑var access
 import hmac, hashlib, base64                        # build Cognito SECRET_HASH
 import json, uuid                                   # misc utilities (uuid unused here)
@@ -83,39 +83,52 @@ def get_secret_hash(username: str) -> str:           # helper function to genera
 # Handles new user registration flow, including initial signup, email verification,
 # and code confirmation. Works with Cognito's built-in verification system.
 
-@auth_bp.route('/signup', methods=['GET', 'POST'])   # /auth/signup endpoint definition
+@auth_bp.route('/signup', methods=['GET', 'POST'])
 def signup():
     """Register new user via Cognito sign_up."""
-    if request.method == 'POST':                     # handle form submission
-        email    = request.form['email']             # get email from signup form
-        password = request.form['password']          # get password from signup form
-        confirm  = request.form['confirmPassword']   # get password confirmation from form
-        name     = request.form['name']              # get user's display name from form
-        if password != confirm:                      # quick server-side password match check
-            flash('Passwords do not match.', 'danger')    # show error message
-            return redirect(url_for('auth.signup'))  # return to signup page
+    if request.method == 'POST':
+        email = request.form['email']
+        password = request.form['password']
+        confirm = request.form['confirmPassword']
+        name = request.form['name']
+        
+        if password != confirm:
+            flash('Passwords do not match.', 'danger')
+            return redirect(url_for('auth.signup'))
+            
         try:
-            client.sign_up(                          # call Cognito signup API
-                ClientId=CLIENT_ID,                  # app client identifier
-                Username=email,                      # email serves as username
-                Password=password,                   # user's chosen password
-                SecretHash=get_secret_hash(email),   # required hash for app client auth
-                UserAttributes=[                     # Cognito user attributes
-                    {'Name': 'name',  'Value': name},    # display name attribute
-                    {'Name': 'email', 'Value': email},   # email attribute (required)
-                    {'Name': 'preferred_username', 'Value': email}  # username defaults to email
+            # Cognito signup
+            response = client.sign_up(
+                ClientId=CLIENT_ID,
+                Username=email,
+                Password=password,
+                SecretHash=get_secret_hash(email),
+                UserAttributes=[
+                    {'Name': 'name', 'Value': name},
+                    {'Name': 'email', 'Value': email},
+                    {'Name': 'preferred_username', 'Value': email}
                 ]
             )
-            session['temp_email'] = email           # store email for confirmation page
-            flash('Check your email for a code.', 'success')  # show success message
-            return redirect(url_for('auth.confirm')) # redirect to confirmation page
-        except client.exceptions.UsernameExistsException:    # email already registered
+            
+            # Create DynamoDB user record
+            user_id = response['UserSub']  # Get the Cognito user ID
+            if current_app.db_manager.create_user(user_id, email, name):
+                session['temp_email'] = email
+                flash('Check your email for a code.', 'success')
+                return redirect(url_for('auth.confirm'))
+            else:
+                logger.error(f"Failed to create DynamoDB record for user: {email}")
+                flash('Account created but profile setup failed. Please contact support.', 'warning')
+                return redirect(url_for('auth.confirm'))
+                
+        except client.exceptions.UsernameExistsException:
             flash('Email already registered.', 'danger')
-        except client.exceptions.InvalidPasswordException:   # password doesn't meet requirements
+        except client.exceptions.InvalidPasswordException:
             flash('Password fails complexity rules.', 'danger')
-        except Exception as e:                       # catch-all for other errors
-            logger.error(f"Signup error: {e}", exc_info=True)  # log unexpected errors
-            flash('Registration failed.', 'danger')  # show generic error message
+        except Exception as e:
+            logger.error(f"Signup error: {e}", exc_info=True)
+            flash('Registration failed.', 'danger')
+            
     return render_template('auth/signup.html')       # show signup form for GET/failed POST
 
 # ------------------- EMAIL VERIFICATION ROUTES ---------------------------
