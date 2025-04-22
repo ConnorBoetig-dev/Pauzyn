@@ -1,47 +1,30 @@
 # ------------------- IMPORTS AND DEPENDENCIES ---------------------------
-# Core Flask imports for routing, templates, and session management,
-# plus JWT handling for user authentication
-
-from flask import Blueprint, render_template, redirect, url_for, flash, session
-import jwt
-import logging
+from flask import Blueprint, render_template, redirect, url_for, flash, session  # Flask routing, templates, sessions
+import jwt                                                                       # Token decode utility
+import logging                                                                   # Built‑in logging
 
 # ------------------- LOGGING CONFIGURATION ---------------------------
-# Sets up debug-level logging for the account management system
-# to track user actions and potential issues
-
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.DEBUG)                                         # Global DEBUG log level
+logger = logging.getLogger(__name__)                                             # Module‑level logger
 
 # ------------------- BLUEPRINT SETUP ---------------------------
-# Creates the account blueprint that handles all account-related
-# functionality, including profile viewing and management
-
-account_bp = Blueprint('account', __name__)
+account_bp = Blueprint('account', __name__)                                      # Register as 'account' blueprint
 
 # ------------------- CORE ACCOUNT ROUTES ---------------------------
-# Main account management routes that handle user profile display
-# and account information retrieval from Cognito tokens
-
-@account_bp.route('/')
+@account_bp.route('/')                                                            # Dashboard root → /account/
 def index():
-    """Handle account page display"""
-    if 'id_token' not in session:                    # check for valid user session
-        flash('Please login to view your account.', 'warning')  # inform user they need to login
-        return redirect(url_for('auth.login'))       # redirect to login page
-        
-    # Decode the ID token to get user information
-    decoded_token = jwt.decode(session['id_token'], options={"verify_signature": False})
-    
-    return render_template('account/index.html', user_info=decoded_token)  # display account page
+    """Render the logged‑in user’s account page"""                        # Docstring for function
+    if 'id_token' not in session:                                                 # No JWT in session?
+        flash('Please login to view your account.', 'warning')                    #  Notify and
+        return redirect(url_for('auth.login'))                                    #  redirect to /auth/login
+
+    # Decode the (already‑verified) Cognito ID token just for displaying claims
+    decoded_token = jwt.decode(session['id_token'], options={"verify_signature": False})  # ⚠ skipping sig check only for local use
+
+    return render_template('account/index.html', user_info=decoded_token)        # Pass claims to template
 
 # ------------------- PLANNED ACCOUNT FEATURES ---------------------------
-# Future account management endpoints to be implemented:
-# - Profile management (/profile)
-# - Subscription handling (/subscription)
-# - Usage tracking (/usage)
-# 
-# @account_bp.route('/profile')
-# @account_bp.route('/subscription')
-# @account_bp.route('/usage')
-# etc.
+# @account_bp.route('/profile')                                                   # Future: edit profile
+# @account_bp.route('/subscription')                                              # Future: manage plan
+# @account_bp.route('/usage')                                                     # Future: usage dashboard
+
